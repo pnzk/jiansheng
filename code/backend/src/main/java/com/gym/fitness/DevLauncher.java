@@ -939,7 +939,7 @@ public class DevLauncher {
         for (String arg : args) {
             command.add(arg);
         }
-        return runCommandOrFail(workingDir, command.toArray(new String[0]));
+        return runCommandOrFailWithCurrentJava(workingDir, command.toArray(new String[0]));
     }
 
     private static boolean runNpmCommandOrFail(Path workingDir, List<String> npmCommand, String... args) {
@@ -971,6 +971,22 @@ public class DevLauncher {
         return true;
     }
 
+    private static boolean runCommandOrFailWithCurrentJava(Path workingDir, String... command) {
+        CommandResult result = runCommandWithCurrentJava(workingDir, command);
+        if (result == null) {
+            System.err.println("Failed to run command.");
+            return false;
+        }
+        if (result.exitCode != 0) {
+            System.err.println("Command failed: " + String.join(" ", command));
+            if (result.output != null && !result.output.trim().isEmpty()) {
+                System.err.println(result.output.trim());
+            }
+            return false;
+        }
+        return true;
+    }
+
     private static CommandResult runCommand(Path workingDir, String... command) {
         ProcessBuilder builder = new ProcessBuilder(command);
         if (workingDir != null) {
@@ -987,6 +1003,51 @@ public class DevLauncher {
             return null;
         } catch (IOException e) {
             return null;
+        }
+    }
+
+    private static CommandResult runCommandWithCurrentJava(Path workingDir, String... command) {
+        ProcessBuilder builder = new ProcessBuilder(command);
+        if (workingDir != null) {
+            builder.directory(workingDir.toFile());
+        }
+        String javaHome = System.getProperty("java.home");
+        if (javaHome != null && !javaHome.trim().isEmpty()) {
+            File javaHomeDir = new File(javaHome);
+            File jreCandidate = new File(javaHomeDir, "bin");
+            File jdkCandidate = javaHomeDir.getParentFile() == null ? null : new File(javaHomeDir.getParentFile(), "bin");
+
+            if (new File(jreCandidate, isWindows() ? "javac.exe" : "javac").exists()) {
+                builder.environment().put("JAVA_HOME", javaHomeDir.getAbsolutePath());
+                prependPath(builder, jreCandidate.getAbsolutePath());
+            } else if (jdkCandidate != null && new File(jdkCandidate, isWindows() ? "javac.exe" : "javac").exists()) {
+                builder.environment().put("JAVA_HOME", jdkCandidate.getParentFile().getAbsolutePath());
+                prependPath(builder, jdkCandidate.getAbsolutePath());
+            } else {
+                builder.environment().put("JAVA_HOME", javaHomeDir.getAbsolutePath());
+            }
+        }
+        builder.redirectErrorStream(true);
+        try {
+            Process process = builder.start();
+            String output = readAll(process.getInputStream());
+            int exitCode = process.waitFor();
+            return new CommandResult(exitCode, output);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return null;
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    private static void prependPath(ProcessBuilder builder, String firstPath) {
+        String pathKey = isWindows() ? "Path" : "PATH";
+        String oldPath = builder.environment().get(pathKey);
+        if (oldPath == null || oldPath.isEmpty()) {
+            builder.environment().put(pathKey, firstPath);
+        } else {
+            builder.environment().put(pathKey, firstPath + File.pathSeparator + oldPath);
         }
     }
 
