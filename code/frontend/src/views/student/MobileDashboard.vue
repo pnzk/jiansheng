@@ -185,6 +185,7 @@ import { getLatestBodyMetric, getBodyMetricHistory } from '@/api/bodyMetric'
 import { getExerciseStatistics } from '@/api/exercise'
 import { getMyTrainingPlan } from '@/api/trainingPlan'
 import { getPeakHourWarning } from '@/api/analytics'
+import { initChart } from '@/utils/chartTheme'
 
 const weekChartRef = ref(null)
 const currentTime = ref(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
@@ -270,7 +271,7 @@ const loadData = async () => {
 
 const initWeekChart = () => {
   if (!weekChartRef.value) return
-  const chart = echarts.init(weekChartRef.value)
+  const chart = initChart(weekChartRef.value)
   chart.setOption({
     grid: { left: 30, right: 10, top: 10, bottom: 20 },
     xAxis: {

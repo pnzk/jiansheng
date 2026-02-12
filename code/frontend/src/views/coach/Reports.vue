@@ -2,7 +2,6 @@
   <div class="reports-page">
     <h2>学员效果对比报告</h2>
 
-    <!-- 筛选区 -->
     <el-card style="margin-top: 20px">
       <el-form :inline="true">
         <el-form-item label="选择学员">
@@ -10,7 +9,7 @@
             v-model="selectedStudents"
             multiple
             placeholder="最多选择5个学员"
-            style="width: 400px"
+            style="width: 420px"
             :max-collapse-tags="3"
           >
             <el-option
@@ -39,12 +38,11 @@
       </el-form>
     </el-card>
 
-    <!-- 对比表格 -->
     <el-card v-if="reportData.length > 0" style="margin-top: 20px">
       <template #header>
         <div style="display: flex; justify-content: space-between; align-items: center">
           <span>学员对比数据</span>
-          <el-button size="small" @click="exportReport">导出报告</el-button>
+          <el-button size="small" @click="exportReport">导出CSV</el-button>
         </div>
       </template>
       <el-table :data="reportData" border style="width: 100%">
@@ -62,15 +60,14 @@
         <el-table-column prop="totalCalories" label="总消耗卡路里" width="150" />
         <el-table-column prop="exerciseCount" label="运动次数" width="120" />
         <el-table-column prop="avgDuration" label="平均时长(分钟)" width="150" />
-        <el-table-column prop="planProgress" label="计划完成率" width="120">
+        <el-table-column prop="planProgress" label="计划完成率" width="150">
           <template #default="{ row }">
-            <el-progress :percentage="row.planProgress" :color="getProgressColor(row.planProgress)" />
+            <el-progress :percentage="Math.round(Number(row.planProgress || 0))" :color="getProgressColor(row.planProgress)" />
           </template>
         </el-table-column>
       </el-table>
     </el-card>
 
-    <!-- 对比图表 -->
     <el-row v-if="reportData.length > 0" :gutter="20" style="margin-top: 20px">
       <el-col :span="12">
         <el-card>
@@ -112,11 +109,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
+import { nextTick, onMounted, ref } from 'vue'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
-import { getBodyMetricHistory } from '@/api/bodyMetric'
-import { getExerciseStatistics } from '@/api/exercise'
+import { getCoachStudents } from '@/api/user'
+import { getCoachStudentReport } from '@/api/analytics'
+import { CHART_COLORS, initChart } from '@/utils/chartTheme'
 
 const selectedStudents = ref([])
 const dateRange = ref([])
@@ -128,22 +126,20 @@ const durationCompareChartRef = ref(null)
 const caloriesCompareChartRef = ref(null)
 const progressCompareChartRef = ref(null)
 
-onMounted(() => {
-  loadStudentList()
+onMounted(async () => {
+  await loadStudentList()
 })
 
-const loadStudentList = () => {
-  // 模拟学员列表数据
-  studentList.value = [
-    { userId: 1, realName: '张三' },
-    { userId: 2, realName: '李四' },
-    { userId: 3, realName: '王五' },
-    { userId: 4, realName: '赵六' },
-    { userId: 5, realName: '孙七' },
-    { userId: 6, realName: '周八' },
-    { userId: 7, realName: '吴九' },
-    { userId: 8, realName: '郑十' }
-  ]
+const loadStudentList = async () => {
+  try {
+    const students = await getCoachStudents()
+    studentList.value = (students || []).map((item) => ({
+      userId: item.id,
+      realName: item.realName || item.username
+    }))
+  } catch (error) {
+    ElMessage.error('加载学员列表失败')
+  }
 }
 
 const generateReport = async () => {
@@ -153,23 +149,30 @@ const generateReport = async () => {
   }
 
   try {
-    // 模拟生成报告数据
-    reportData.value = selectedStudents.value.map(userId => {
-      const student = studentList.value.find(s => s.userId === userId)
-      const startWeight = 70 + Math.random() * 20
-      const weightChange = -2 - Math.random() * 8
-      return {
-        studentName: student.realName,
-        startWeight: startWeight.toFixed(1),
-        currentWeight: (startWeight + weightChange).toFixed(1),
-        weightChange: weightChange.toFixed(1),
-        totalDuration: Math.floor(1000 + Math.random() * 2000),
-        totalCalories: Math.floor(5000 + Math.random() * 10000),
-        exerciseCount: Math.floor(20 + Math.random() * 40),
-        avgDuration: Math.floor(30 + Math.random() * 30),
-        planProgress: Math.floor(60 + Math.random() * 40)
-      }
-    })
+    const [startDate, endDate] = dateRange.value || []
+    const params = {
+      studentIds: selectedStudents.value.join(',')
+    }
+
+    if (startDate && endDate) {
+      params.startDate = formatDate(startDate)
+      params.endDate = formatDate(endDate)
+    }
+
+    const data = await getCoachStudentReport(params)
+    reportData.value = (data || []).map((item) => ({
+      ...item,
+      startWeight: formatNumber(item.startWeight),
+      currentWeight: formatNumber(item.currentWeight),
+      weightChange: formatNumber(item.weightChange),
+      totalCalories: Math.round(Number(item.totalCalories || 0)),
+      planProgress: Number(item.planProgress || 0)
+    }))
+
+    if (reportData.value.length === 0) {
+      ElMessage.warning('当前筛选条件下暂无可对比数据')
+      return
+    }
 
     await nextTick()
     initCharts()
@@ -185,79 +188,132 @@ const resetFilters = () => {
   reportData.value = []
 }
 
+const formatDate = (value) => {
+  const date = new Date(value)
+  return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, '0')}-${`${date.getDate()}`.padStart(2, '0')}`
+}
+
+const formatNumber = (value) => {
+  if (value == null || value === '') {
+    return '-'
+  }
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) {
+    return '-'
+  }
+  return Number(numeric.toFixed(1))
+}
+
 const initCharts = () => {
-  const colors = ['#409eff', '#67c23a', '#e6a23c', '#f56c6c', '#909399']
-  
-  // 体重变化对比图
-  const weightChart = echarts.init(weightCompareChartRef.value)
+  const colors = CHART_COLORS
+
+  const weightChart = initChart(weightCompareChartRef.value)
   weightChart.setOption({
     tooltip: { trigger: 'axis' },
-    legend: { data: reportData.value.map(d => d.studentName) },
+    legend: { data: reportData.value.map((item) => item.studentName) },
     xAxis: { type: 'category', data: ['初始', '当前'] },
     yAxis: { type: 'value', name: '体重(kg)' },
-    series: reportData.value.map((data, index) => ({
-      name: data.studentName,
+    series: reportData.value.map((item, index) => ({
+      name: item.studentName,
       type: 'line',
-      data: [parseFloat(data.startWeight), parseFloat(data.currentWeight)],
+      data: [
+        item.startWeight === '-' ? 0 : Number(item.startWeight),
+        item.currentWeight === '-' ? 0 : Number(item.currentWeight)
+      ],
       itemStyle: { color: colors[index % colors.length] }
     }))
   })
 
-  // 运动时长对比图
-  const durationChart = echarts.init(durationCompareChartRef.value)
+  const durationChart = initChart(durationCompareChartRef.value)
   durationChart.setOption({
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    xAxis: { type: 'category', data: reportData.value.map(d => d.studentName) },
+    xAxis: { type: 'category', data: reportData.value.map((item) => item.studentName) },
     yAxis: { type: 'value', name: '时长(分钟)' },
     series: [{
       type: 'bar',
-      data: reportData.value.map((d, i) => ({
-        value: d.totalDuration,
-        itemStyle: { color: colors[i % colors.length] }
+      data: reportData.value.map((item, index) => ({
+        value: Number(item.totalDuration || 0),
+        itemStyle: { color: colors[index % colors.length] }
       }))
     }]
   })
 
-  // 卡路里消耗对比图
-  const caloriesChart = echarts.init(caloriesCompareChartRef.value)
+  const caloriesChart = initChart(caloriesCompareChartRef.value)
   caloriesChart.setOption({
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    xAxis: { type: 'category', data: reportData.value.map(d => d.studentName) },
+    xAxis: { type: 'category', data: reportData.value.map((item) => item.studentName) },
     yAxis: { type: 'value', name: '卡路里' },
     series: [{
       type: 'bar',
-      data: reportData.value.map((d, i) => ({
-        value: d.totalCalories,
-        itemStyle: { color: colors[i % colors.length] }
+      data: reportData.value.map((item, index) => ({
+        value: Number(item.totalCalories || 0),
+        itemStyle: { color: colors[index % colors.length] }
       }))
     }]
   })
 
-  // 计划完成率对比图
-  const progressChart = echarts.init(progressCompareChartRef.value)
+  const progressChart = initChart(progressCompareChartRef.value)
   progressChart.setOption({
     tooltip: { trigger: 'item', formatter: '{b}: {c}%' },
     legend: { orient: 'vertical', left: 'left' },
     series: [{
       type: 'pie',
       radius: '60%',
-      data: reportData.value.map((d, i) => ({
-        value: d.planProgress,
-        name: d.studentName,
-        itemStyle: { color: colors[i % colors.length] }
+      data: reportData.value.map((item, index) => ({
+        value: Number(item.planProgress || 0),
+        name: item.studentName,
+        itemStyle: { color: colors[index % colors.length] }
       }))
     }]
   })
 }
 
 const getProgressColor = (progress) => {
-  if (progress >= 80) return '#67c23a'
-  if (progress >= 60) return '#e6a23c'
+  const value = Number(progress || 0)
+  if (value >= 80) return '#67c23a'
+  if (value >= 60) return '#e6a23c'
   return '#f56c6c'
 }
 
 const exportReport = () => {
-  ElMessage.info('导出功能开发中...')
+  if (!reportData.value.length) {
+    ElMessage.warning('暂无可导出数据')
+    return
+  }
+
+  const headers = [
+    '学员姓名',
+    '初始体重(kg)',
+    '当前体重(kg)',
+    '体重变化(kg)',
+    '总运动时长(分钟)',
+    '总消耗卡路里',
+    '运动次数',
+    '平均时长(分钟)',
+    '计划完成率(%)'
+  ]
+
+  const rows = reportData.value.map((item) => [
+    item.studentName,
+    item.startWeight,
+    item.currentWeight,
+    item.weightChange,
+    item.totalDuration,
+    item.totalCalories,
+    item.exerciseCount,
+    item.avgDuration,
+    Math.round(Number(item.planProgress || 0))
+  ])
+
+  const csv = [headers, ...rows].map((row) => row.join(',')).join('\n')
+  const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8;' })
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(blob)
+  link.download = `coach_report_${Date.now()}.csv`
+  link.click()
+  URL.revokeObjectURL(link.href)
+
+  ElMessage.success('导出成功')
 }
 </script>
 

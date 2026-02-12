@@ -1,10 +1,9 @@
 <template>
   <div class="achievements-page">
     <h2>健身成就与排行榜</h2>
-    
+
     <el-tabs v-model="activeTab">
       <el-tab-pane label="成就勋章墙" name="achievements">
-        <!-- 成就统计 -->
         <el-row :gutter="20" style="margin-bottom: 20px">
           <el-col :span="8">
             <el-card class="stats-card">
@@ -17,7 +16,7 @@
           </el-col>
           <el-col :span="8">
             <el-card class="stats-card">
-              <div class="stats-icon">🔥</div>
+              <div class="stats-icon">🏃</div>
               <div class="stats-info">
                 <div class="stats-value">{{ totalExercises }}</div>
                 <div class="stats-label">累计运动次数</div>
@@ -26,7 +25,7 @@
           </el-col>
           <el-col :span="8">
             <el-card class="stats-card">
-              <div class="stats-icon">⚡</div>
+              <div class="stats-icon">🔥</div>
               <div class="stats-info">
                 <div class="stats-value">{{ totalCalories.toLocaleString() }}</div>
                 <div class="stats-label">累计消耗卡路里</div>
@@ -35,7 +34,6 @@
           </el-col>
         </el-row>
 
-        <!-- 成就勋章墙 -->
         <el-card>
           <template #header>
             <span>🏆 成就勋章墙</span>
@@ -61,7 +59,6 @@
           </el-row>
         </el-card>
 
-        <!-- 成就解锁时间线 -->
         <el-card style="margin-top: 20px">
           <template #header>
             <span>📅 成就解锁时间线</span>
@@ -88,10 +85,9 @@
           <el-empty v-if="!unlockedTimeline.length" description="暂无解锁成就" />
         </el-card>
       </el-tab-pane>
-      
+
       <el-tab-pane label="健身排行榜" name="leaderboard">
         <el-row :gutter="20">
-          <!-- 减重排行榜 -->
           <el-col :span="12">
             <el-card>
               <template #header>
@@ -101,8 +97,8 @@
                 </div>
               </template>
               <div class="leaderboard-list">
-                <div 
-                  v-for="(item, index) in weightLossLeaderboard" 
+                <div
+                  v-for="(item, index) in weightLossLeaderboard"
                   :key="item.userId"
                   class="leaderboard-item"
                   :class="{ 'is-me': item.isMe }"
@@ -119,11 +115,11 @@
                   </div>
                   <div class="value">-{{ item.value }} kg</div>
                 </div>
+                <el-empty v-if="!weightLossLeaderboard.length" description="暂无数据" :image-size="70" />
               </div>
             </el-card>
           </el-col>
 
-          <!-- 运动时长排行榜 -->
           <el-col :span="12">
             <el-card>
               <template #header>
@@ -133,8 +129,8 @@
                 </div>
               </template>
               <div class="leaderboard-list">
-                <div 
-                  v-for="(item, index) in durationLeaderboard" 
+                <div
+                  v-for="(item, index) in durationLeaderboard"
                   :key="item.userId"
                   class="leaderboard-item"
                   :class="{ 'is-me': item.isMe }"
@@ -151,6 +147,7 @@
                   </div>
                   <div class="value">{{ item.value }} 分钟</div>
                 </div>
+                <el-empty v-if="!durationLeaderboard.length" description="暂无数据" :image-size="70" />
               </div>
             </el-card>
           </el-col>
@@ -161,11 +158,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { getUserAchievements } from '@/api/achievement'
 import { getLeaderboard } from '@/api/analytics'
-import { getExerciseStatistics } from '@/api/exercise'
+import { getBodyMetricHistory } from '@/api/bodyMetric'
+import { getExerciseStatistics, getUserExerciseRecords } from '@/api/exercise'
 
 const activeTab = ref('achievements')
 const achievements = ref([])
@@ -173,45 +170,99 @@ const weightLossLeaderboard = ref([])
 const durationLeaderboard = ref([])
 const totalExercises = ref(0)
 const totalCalories = ref(0)
+const currentUserId = Number(localStorage.getItem('userId') || 0)
 
-const unlockedCount = computed(() => achievements.value.filter(a => a.unlocked).length)
+const achievementProgressState = reactive({
+  totalExercises: 0,
+  totalCalories: 0,
+  maxDuration: 0,
+  longestStreak: 0,
+  runningDistance: 0,
+  weightLoss: 0,
+  fatLoss: 0,
+  muscleGain: 0
+})
+
+const unlockedCount = computed(() => achievements.value.filter((item) => item.unlocked).length)
 
 const unlockedTimeline = computed(() => {
   return achievements.value
-    .filter(a => a.unlocked)
-    .sort((a, b) => new Date(b.unlockedAt) - new Date(a.unlockedAt))
+    .filter((item) => item.unlocked)
+    .sort((left, right) => new Date(right.unlockedAt) - new Date(left.unlockedAt))
 })
 
 const getAchievementIcon = (type) => {
   const icons = {
-    'EXERCISE_COUNT': '🏃',
-    'CONSECUTIVE_DAYS': '📅',
-    'TOTAL_CALORIES': '🔥',
-    'RUNNING_DISTANCE': '🏅',
-    'WEIGHT_LOSS': '⚖️',
-    'FAT_LOSS': '💪',
-    'MUSCLE_GAIN': '🏋️',
-    'SINGLE_DURATION': '⏱️'
+    EXERCISE_COUNT: '🏅',
+    CONSECUTIVE_DAYS: '📅',
+    TOTAL_CALORIES: '🔥',
+    RUNNING_DISTANCE: '🏃',
+    WEIGHT_LOSS: '⚖️',
+    FAT_LOSS: '🎯',
+    MUSCLE_GAIN: '💪',
+    SINGLE_DURATION: '⏱️'
   }
   return icons[type] || '🏆'
 }
 
 const getTimelineColor = (type) => {
   const colors = {
-    'EXERCISE_COUNT': '#409eff',
-    'CONSECUTIVE_DAYS': '#67c23a',
-    'TOTAL_CALORIES': '#f56c6c',
-    'WEIGHT_LOSS': '#e6a23c'
+    EXERCISE_COUNT: '#409eff',
+    CONSECUTIVE_DAYS: '#67c23a',
+    TOTAL_CALORIES: '#f56c6c',
+    WEIGHT_LOSS: '#e6a23c'
   }
   return colors[type] || '#909399'
 }
 
 const getProgress = (achievement) => {
-  return Math.min(Math.random() * 80, 100)
+  if (achievement?.unlocked) {
+    return 100
+  }
+
+  const threshold = Number(achievement?.thresholdValue || 0)
+  if (!Number.isFinite(threshold) || threshold <= 0) {
+    return 0
+  }
+
+  const currentValue = getAchievementCurrentValue(achievement?.achievementType)
+  if (!Number.isFinite(currentValue) || currentValue <= 0) {
+    return 0
+  }
+
+  return Math.min(Math.round((currentValue / threshold) * 100), 100)
+}
+
+const getAchievementCurrentValue = (type) => {
+  const normalizedType = `${type || ''}`.trim().toUpperCase()
+  switch (normalizedType) {
+    case 'EXERCISE_COUNT':
+      return achievementProgressState.totalExercises
+    case 'CONSECUTIVE_DAYS':
+      return achievementProgressState.longestStreak
+    case 'TOTAL_CALORIES':
+    case 'CALORIES':
+      return achievementProgressState.totalCalories
+    case 'RUNNING_DISTANCE':
+      return achievementProgressState.runningDistance
+    case 'WEIGHT_LOSS':
+      return achievementProgressState.weightLoss
+    case 'FAT_LOSS':
+      return achievementProgressState.fatLoss
+    case 'MUSCLE_GAIN':
+      return achievementProgressState.muscleGain
+    case 'SINGLE_DURATION':
+    case 'DURATION':
+      return achievementProgressState.maxDuration
+    default:
+      return 0
+  }
 }
 
 const formatDate = (date) => {
-  if (!date) return ''
+  if (!date) {
+    return ''
+  }
   return new Date(date).toLocaleDateString('zh-CN')
 }
 
@@ -232,45 +283,136 @@ const loadAchievements = async () => {
     const data = await getUserAchievements()
     achievements.value = data || []
   } catch (error) {
-    // 使用模拟数据
-    achievements.value = [
-      { id: 1, achievementName: '健身新手', description: '完成第1次运动', achievementType: 'EXERCISE_COUNT', unlocked: true, unlockedAt: '2025-01-10' },
-      { id: 2, achievementName: '坚持不懈', description: '连续运动7天', achievementType: 'CONSECUTIVE_DAYS', unlocked: true, unlockedAt: '2025-01-15' },
-      { id: 3, achievementName: '运动达人', description: '累计运动50次', achievementType: 'EXERCISE_COUNT', unlocked: false },
-      { id: 4, achievementName: '卡路里杀手', description: '累计消耗10000卡路里', achievementType: 'TOTAL_CALORIES', unlocked: false },
-      { id: 5, achievementName: '减重冠军', description: '成功减重5kg', achievementType: 'WEIGHT_LOSS', unlocked: false },
-      { id: 6, achievementName: '时长大师', description: '单次运动超过2小时', achievementType: 'SINGLE_DURATION', unlocked: true, unlockedAt: '2025-01-18' }
-    ]
+    achievements.value = []
   }
 }
 
+const normalizeLeaderboard = (data) => {
+  return (data?.entries || []).map((item) => ({
+    ...item,
+    isMe: Number(item.userId) === currentUserId
+  }))
+}
+
 const loadLeaderboards = async () => {
-  // 直接使用模拟数据，避免后端排行榜API错误
-  weightLossLeaderboard.value = [
-    { userId: 1, username: 'user1', realName: '张三', value: 5.2, isMe: false },
-    { userId: 2, username: 'user2', realName: '李四', value: 4.8, isMe: true },
-    { userId: 3, username: 'user3', realName: '王五', value: 4.5, isMe: false },
-    { userId: 4, username: 'user4', realName: '赵六', value: 3.9, isMe: false },
-    { userId: 5, username: 'user5', realName: '钱七', value: 3.2, isMe: false }
-  ]
-  durationLeaderboard.value = [
-    { userId: 1, username: 'user1', realName: '李四', value: 1250, isMe: true },
-    { userId: 2, username: 'user2', realName: '张三', value: 1180, isMe: false },
-    { userId: 3, username: 'user3', realName: '王五', value: 980, isMe: false },
-    { userId: 4, username: 'user4', realName: '赵六', value: 850, isMe: false },
-    { userId: 5, username: 'user5', realName: '钱七', value: 720, isMe: false }
-  ]
+  try {
+    const [weightLossData, durationData] = await Promise.all([
+      getLeaderboard('WEIGHT_LOSS', 10),
+      getLeaderboard('TOTAL_DURATION', 10)
+    ])
+
+    weightLossLeaderboard.value = normalizeLeaderboard(weightLossData)
+    durationLeaderboard.value = normalizeLeaderboard(durationData)
+  } catch (error) {
+    weightLossLeaderboard.value = []
+    durationLeaderboard.value = []
+  }
 }
 
 const loadStats = async () => {
   try {
-    const stats = await getExerciseStatistics()
-    totalExercises.value = stats?.totalExercises || 45
-    totalCalories.value = stats?.totalCalories || 28500
+    const [exerciseStats, records, metrics] = await Promise.all([
+      getExerciseStatistics(),
+      getUserExerciseRecords(),
+      getBodyMetricHistory()
+    ])
+
+    const exerciseRecords = Array.isArray(records) ? records : []
+    const bodyMetrics = Array.isArray(metrics) ? metrics : []
+
+    totalExercises.value = Number(exerciseStats?.totalRecords ?? exerciseRecords.length ?? 0)
+    totalCalories.value = Math.round(Number(exerciseStats?.totalCaloriesBurned ?? 0))
+
+    achievementProgressState.totalExercises = totalExercises.value
+    achievementProgressState.totalCalories = totalCalories.value
+    achievementProgressState.maxDuration = exerciseRecords.reduce((max, item) => {
+      const duration = Number(item.durationMinutes || 0)
+      return duration > max ? duration : max
+    }, 0)
+    achievementProgressState.longestStreak = calculateLongestStreak(exerciseRecords)
+    achievementProgressState.runningDistance = estimateRunningDistance(exerciseRecords)
+
+    const sortedMetrics = bodyMetrics
+      .filter((item) => item && item.measurementDate)
+      .sort((left, right) => new Date(left.measurementDate) - new Date(right.measurementDate))
+
+    if (sortedMetrics.length >= 2) {
+      const first = sortedMetrics[0]
+      const latest = sortedMetrics[sortedMetrics.length - 1]
+
+      achievementProgressState.weightLoss = roundOneDecimal(Math.max(Number(first.weightKg || 0) - Number(latest.weightKg || 0), 0))
+      achievementProgressState.fatLoss = roundOneDecimal(Math.max(Number(first.bodyFatPercentage || 0) - Number(latest.bodyFatPercentage || 0), 0))
+      achievementProgressState.muscleGain = roundOneDecimal(Math.max(Number(latest.muscleMassKg || 0) - Number(first.muscleMassKg || 0), 0))
+    } else {
+      achievementProgressState.weightLoss = 0
+      achievementProgressState.fatLoss = 0
+      achievementProgressState.muscleGain = 0
+    }
   } catch (error) {
-    totalExercises.value = 45
-    totalCalories.value = 28500
+    totalExercises.value = 0
+    totalCalories.value = 0
+
+    achievementProgressState.totalExercises = 0
+    achievementProgressState.totalCalories = 0
+    achievementProgressState.maxDuration = 0
+    achievementProgressState.longestStreak = 0
+    achievementProgressState.runningDistance = 0
+    achievementProgressState.weightLoss = 0
+    achievementProgressState.fatLoss = 0
+    achievementProgressState.muscleGain = 0
   }
+}
+
+const calculateLongestStreak = (records) => {
+  if (!records.length) {
+    return 0
+  }
+
+  const uniqueDates = [...new Set(records
+    .map((item) => (item?.exerciseDate ? normalizeDateString(item.exerciseDate) : null))
+    .filter(Boolean))]
+    .sort()
+
+  if (!uniqueDates.length) {
+    return 0
+  }
+
+  let longest = 1
+  let current = 1
+
+  for (let i = 1; i < uniqueDates.length; i++) {
+    const previous = new Date(`${uniqueDates[i - 1]}T00:00:00`)
+    const next = new Date(`${uniqueDates[i]}T00:00:00`)
+    const days = Math.round((next - previous) / (24 * 60 * 60 * 1000))
+    if (days === 1) {
+      current += 1
+      longest = Math.max(longest, current)
+    } else {
+      current = 1
+    }
+  }
+
+  return longest
+}
+
+const estimateRunningDistance = (records) => {
+  const runningMinutes = records
+    .filter((item) => /跑|run/i.test(`${item?.exerciseType || ''}`))
+    .reduce((sum, item) => sum + Number(item.durationMinutes || 0), 0)
+
+  return roundOneDecimal((runningMinutes / 60) * 8)
+}
+
+const normalizeDateString = (value) => {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+  return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, '0')}-${`${date.getDate()}`.padStart(2, '0')}`
+}
+
+const roundOneDecimal = (value) => {
+  return Number(Number(value || 0).toFixed(1))
 }
 
 onMounted(() => {
@@ -357,8 +499,15 @@ onMounted(() => {
 }
 
 @keyframes glow {
-  0%, 100% { transform: scale(1); opacity: 0.5; }
-  50% { transform: scale(1.2); opacity: 0.8; }
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.8;
+  }
 }
 
 .achievement-card h4 {

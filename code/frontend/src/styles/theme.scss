@@ -1,0 +1,94 @@
+:root {
+  --gf-primary: #4a90ff;
+  --gf-primary-dark: #3d73f3;
+  --gf-secondary: #6f63ff;
+  --gf-surface: #ffffff;
+  --gf-bg: #f3f7ff;
+  --gf-border: #e3ebff;
+  --gf-text: #2a3858;
+  --gf-shadow: 0 10px 24px rgba(74, 112, 255, 0.14);
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  background: var(--gf-bg);
+}
+
+body {
+  color: var(--gf-text);
+}
+
+.el-main > div {
+  animation: fade-in-page 0.22s ease-out;
+}
+
+.el-main > div > h2 {
+  margin: 0 0 16px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  color: #fff;
+  font-size: 24px;
+  background: linear-gradient(120deg, var(--gf-primary), var(--gf-secondary));
+  box-shadow: var(--gf-shadow);
+}
+
+.el-main .el-card {
+  border: 1px solid var(--gf-border);
+  border-radius: 14px;
+  box-shadow: var(--gf-shadow);
+  background: var(--gf-surface);
+}
+
+.el-main .el-button--primary {
+  border: none;
+  background: linear-gradient(120deg, var(--gf-primary), var(--gf-secondary));
+}
+
+.el-main .el-button--primary:hover {
+  filter: brightness(1.05);
+}
+
+.el-main .el-table {
+  --el-table-header-bg-color: #f1f6ff;
+  --el-table-border-color: #e4ebff;
+}
+
+.el-main .el-table__row:hover > td {
+  background: #f7faff !important;
+}
+
+.el-main .el-input__wrapper,
+.el-main .el-select__wrapper,
+.el-main .el-textarea__inner {
+  border-radius: 10px;
+}
+
+.el-main .el-dialog {
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.el-main .el-dialog__header {
+  margin: 0;
+  padding: 18px 20px;
+  background: linear-gradient(120deg, #f7f9ff, #eff4ff);
+}
+
+.el-main .el-dialog__body {
+  padding-top: 16px;
+}
+
+@keyframes fade-in-page {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+

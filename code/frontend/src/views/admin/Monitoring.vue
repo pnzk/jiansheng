@@ -2,7 +2,18 @@
   <div class="monitoring-page">
     <h2>健身房全局监控</h2>
 
-    <!-- 关键指标卡片 -->
+    <el-card style="margin-top: 20px">
+      <el-form :inline="true">
+        <el-form-item label="时段活跃口径">
+          <el-radio-group v-model="hourlyRangeType" @change="onHourlyRangeChange">
+            <el-radio-button label="today">当天</el-radio-button>
+            <el-radio-button label="week">近7天</el-radio-button>
+            <el-radio-button label="month">近30天</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
     <el-row :gutter="20" style="margin-top: 20px">
       <el-col :span="6">
         <el-card>
@@ -38,7 +49,7 @@
             </div>
             <div class="stat-content">
               <div class="stat-value">{{ stats.weekDuration }}</div>
-              <div class="stat-label">本周总时长(分钟)</div>
+              <div class="stat-label">累计运动时长(分钟)</div>
             </div>
           </div>
         </el-card>
@@ -51,14 +62,13 @@
             </div>
             <div class="stat-content">
               <div class="stat-value">{{ stats.weekCalories }}</div>
-              <div class="stat-label">本周总卡路里</div>
+              <div class="stat-label">累计消耗卡路里</div>
             </div>
           </div>
         </el-card>
       </el-col>
     </el-row>
 
-    <!-- 高峰期拥堵预警 -->
     <el-row :gutter="20" style="margin-top: 20px">
       <el-col :span="8">
         <el-card class="warning-card">
@@ -73,22 +83,22 @@
               <div class="status-indicator"></div>
               <div class="status-info">
                 <div class="status-title">{{ peakWarning.statusText }}</div>
-                <div class="status-count">当前在馆: {{ peakWarning.currentCount }} 人</div>
+                <div class="status-count">当前活跃: {{ peakWarning.currentCount }} 人</div>
               </div>
             </div>
             <el-divider />
             <div class="peak-info-list">
               <div class="peak-info-item">
-                <span class="label">今日高峰时段</span>
+                <span class="label">识别高峰时段</span>
                 <el-tag type="danger">{{ peakWarning.peakHours }}</el-tag>
               </div>
               <div class="peak-info-item">
-                <span class="label">预计高峰人数</span>
+                <span class="label">高峰人数</span>
                 <span class="value">{{ peakWarning.peakCount }} 人</span>
               </div>
               <div class="peak-info-item">
-                <span class="label">建议运动时段</span>
-                <el-tag type="success">{{ peakWarning.suggestedHours }}</el-tag>
+                <span class="label">建议阈值</span>
+                <span class="value">{{ peakWarning.threshold }} 人</span>
               </div>
             </div>
           </div>
@@ -97,14 +107,13 @@
       <el-col :span="16">
         <el-card>
           <template #header>
-            <span>各时段在线人数热力图</span>
+            <span>{{ heatmapTitle }}</span>
           </template>
           <div ref="heatmapChartRef" style="height: 280px"></div>
         </el-card>
       </el-col>
     </el-row>
 
-    <!-- 图表区 -->
     <el-row :gutter="20" style="margin-top: 20px">
       <el-col :span="12">
         <el-card>
@@ -128,7 +137,7 @@
       <el-col :span="12">
         <el-card>
           <template #header>
-            <span>高峰期时段分析</span>
+            <span>{{ peakHourTitle }}</span>
           </template>
           <div ref="peakHourChartRef" style="height: 300px"></div>
         </el-card>
@@ -143,31 +152,39 @@
       </el-col>
     </el-row>
 
-    <!-- 教练工作量统计 -->
     <el-card style="margin-top: 20px">
       <template #header>
         <span>教练工作量统计</span>
       </template>
       <el-table :data="coachWorkload" style="width: 100%">
-        <el-table-column prop="coachName" label="教练姓名" width="150" />
-        <el-table-column prop="studentCount" label="负责学员数" width="150" />
-        <el-table-column prop="planCount" label="创建计划数" width="150" />
-        <el-table-column prop="activeStudents" label="活跃学员数" width="150" />
-        <el-table-column prop="avgProgress" label="平均完成率" width="150">
+        <el-table-column prop="coachName" label="教练姓名" min-width="150" />
+        <el-table-column prop="studentCount" label="负责学员数" width="130" align="center" />
+        <el-table-column prop="planCount" label="创建计划数" width="130" align="center" />
+        <el-table-column prop="activeStudents" label="活跃学员数" width="130" align="center" />
+        <el-table-column prop="avgProgress" label="平均完成率" min-width="220">
           <template #default="{ row }">
-            <el-progress :percentage="row.avgProgress" />
+            <el-progress :percentage="Math.round(Number(row.avgProgress || 0))" :stroke-width="10" />
           </template>
         </el-table-column>
       </el-table>
+      <el-empty v-if="coachWorkload.length === 0" description="暂无教练工作量数据" />
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
-import { getDashboardStatistics, getUserBehaviorAnalysis, getPeakHourWarning, getEquipmentUsage } from '@/api/analytics'
+import { CHART_COLORS, HEATMAP_GRADIENT, initChart } from '@/utils/chartTheme'
+import {
+  getCoachWorkload,
+  getDashboardStatistics,
+  getEquipmentUsage,
+  getExercisePreference,
+  getHourlyActivity,
+  getPeakHourWarning
+} from '@/api/analytics'
 
 const userGrowthChartRef = ref(null)
 const exerciseTypeChartRef = ref(null)
@@ -185,104 +202,310 @@ const stats = reactive({
 const peakWarning = reactive({
   level: 'normal',
   statusText: '当前空闲',
-  currentCount: 45,
-  peakHours: '18:00-20:00',
-  peakCount: 120,
-  suggestedHours: '10:00-12:00'
+  currentCount: 0,
+  peakHours: '--:00- --:59',
+  peakCount: 0,
+  threshold: 50
 })
 
 const coachWorkload = ref([])
+const exercisePreferenceData = ref([])
+const hourlyData = ref([])
+const equipmentUsageRows = ref([])
+const userGrowthSeries = ref([])
+const heatmapData = ref([])
+const heatmapDayLabels = ref([])
+const hourlyRangeType = ref('week')
+const peakHourTitle = ref('高峰期时段分析（近7天）')
+const heatmapTitle = ref('近7日各时段活跃热力图')
+const chartInstances = []
+
+const hours = Array.from({ length: 24 }, (_, hour) => `${hour}:00`)
+const days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 
 onMounted(async () => {
   await loadData()
+  await nextTick()
   initCharts()
-  initHeatmapChart()
+  resizeCharts()
+  setTimeout(resizeCharts, 200)
+  window.addEventListener('resize', resizeCharts)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', resizeCharts)
+  chartInstances.forEach((chart) => chart.dispose())
+  chartInstances.length = 0
 })
 
 const loadData = async () => {
   try {
-    const dashboardData = await getDashboardStatistics()
-    stats.totalUsers = dashboardData.totalUsers || 0
-    stats.activeUsers = dashboardData.activeUsers || 0
-    stats.weekDuration = dashboardData.totalDuration || 0
-    stats.weekCalories = dashboardData.totalCalories || 0
+    const [dashboardResult, peakResult, equipmentResult, preferenceResult, workloadResult] = await Promise.allSettled([
+      getDashboardStatistics(),
+      getPeakHourWarning(),
+      getEquipmentUsage(),
+      getExercisePreference(),
+      getCoachWorkload()
+    ])
 
-    // 模拟教练工作量数据
-    coachWorkload.value = [
-      { coachName: '王教练', studentCount: 25, planCount: 18, activeStudents: 20, avgProgress: 75 },
-      { coachName: '李教练', studentCount: 30, planCount: 22, activeStudents: 25, avgProgress: 68 },
-      { coachName: '张教练', studentCount: 20, planCount: 15, activeStudents: 18, avgProgress: 82 }
-    ]
+    const dashboardData = dashboardResult.status === 'fulfilled' ? dashboardResult.value : {}
+    const peakData = peakResult.status === 'fulfilled' ? peakResult.value : {}
+    const equipmentData = equipmentResult.status === 'fulfilled' ? equipmentResult.value : {}
+    const preferenceData = preferenceResult.status === 'fulfilled' ? preferenceResult.value : {}
+    const workloadData = workloadResult.status === 'fulfilled' ? workloadResult.value : []
+
+    stats.totalUsers = Number(dashboardData.totalUsers || 0)
+    stats.activeUsers = Number(dashboardData.activeUsers || 0)
+    stats.weekDuration = Number(dashboardData.totalDurationMinutes || dashboardData.totalDuration || 0)
+    stats.weekCalories = Math.round(Number(dashboardData.totalCaloriesBurned || dashboardData.totalCalories || 0))
+
+    peakWarning.currentCount = Number(peakData.currentCount || 0)
+    peakWarning.threshold = Number(peakData.threshold || 50)
+    peakWarning.peakCount = Number(peakData.peakCount || peakData.currentCount || 0)
+
+    const peakHour = Number(peakData.peakHour)
+    if (Number.isFinite(peakHour)) {
+      peakWarning.peakHours = `${peakHour}:00-${peakHour}:59`
+    }
+
+    if (peakData.isPeakHour) {
+      peakWarning.level = 'crowded'
+      peakWarning.statusText = '当前拥挤'
+    } else if ((peakData.currentCount || 0) >= Math.floor((peakData.threshold || 50) * 0.7)) {
+      peakWarning.level = 'busy'
+      peakWarning.statusText = '当前较忙'
+    } else {
+      peakWarning.level = 'normal'
+      peakWarning.statusText = '当前空闲'
+    }
+
+    exercisePreferenceData.value = preferenceData?.preferences || []
+    coachWorkload.value = (workloadData || []).map((item) => ({
+      ...item,
+      avgProgress: Number(item.avgProgress || 0)
+    }))
+
+    equipmentUsageRows.value = Object.entries(equipmentData?.equipmentUsage || {})
+      .map(([name, count]) => ({ name, count: Number(count || 0) }))
+      .sort((left, right) => right.count - left.count)
+
+    userGrowthSeries.value = buildUserGrowthSeries(stats.totalUsers, stats.activeUsers)
+    await loadHourlyDataByRange(hourlyRangeType.value)
   } catch (error) {
-    ElMessage.error('加载数据失败')
+    ElMessage.error('加载监控数据失败')
   }
 }
 
-const initCharts = () => {
-  // 用户增长趋势图
-  const userGrowthChart = echarts.init(userGrowthChartRef.value)
-  userGrowthChart.setOption({
-    tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: ['1月', '2月', '3月', '4月', '5月', '6月'] },
-    yAxis: { type: 'value', name: '用户数' },
-    series: [{
-      data: [450, 480, 500, 520, 540, 560],
-      type: 'line',
-      smooth: true,
-      itemStyle: { color: '#409eff' },
-      areaStyle: { color: 'rgba(64, 158, 255, 0.2)' }
-    }]
+const onHourlyRangeChange = async () => {
+  await loadHourlyDataByRange(hourlyRangeType.value)
+  await nextTick()
+  initPeakHourChart()
+  initHeatmapChart()
+  resizeCharts()
+}
+
+const getHourlyRangeMeta = (rangeType) => {
+  if (rangeType === 'today') {
+    return {
+      days: 1,
+      peakTitle: '高峰期时段分析（当天）',
+      heatmapTitleText: '当天各时段活跃热力图'
+    }
+  }
+  if (rangeType === 'month') {
+    return {
+      days: 30,
+      peakTitle: '高峰期时段分析（近30天）',
+      heatmapTitleText: '近30天各时段活跃热力图'
+    }
+  }
+
+  return {
+    days: 7,
+    peakTitle: '高峰期时段分析（近7天）',
+    heatmapTitleText: '近7日各时段活跃热力图'
+  }
+}
+
+const formatDate = (date) => {
+  return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, '0')}-${`${date.getDate()}`.padStart(2, '0')}`
+}
+
+const buildDateList = (daysCount) => {
+  const today = new Date()
+  return Array.from({ length: daysCount }, (_, index) => {
+    const date = new Date(today)
+    date.setDate(today.getDate() - (daysCount - 1 - index))
+    return formatDate(date)
+  })
+}
+
+const toHourlySeries = (hourlyDataList) => {
+  const dataMap = new Map(
+    (hourlyDataList || []).map((item) => [Number(item.hour), Number(item.count || 0)])
+  )
+  return Array.from({ length: 24 }, (_, hour) => ({
+    hour,
+    count: dataMap.get(hour) || 0
+  }))
+}
+
+const loadHourlyDataByRange = async (rangeType) => {
+  const meta = getHourlyRangeMeta(rangeType)
+  const dateList = buildDateList(meta.days)
+  const startDate = dateList[0]
+  const endDate = dateList[dateList.length - 1]
+
+  peakHourTitle.value = meta.peakTitle
+  heatmapTitle.value = meta.heatmapTitleText
+
+  try {
+    const rangeResult = await getHourlyActivity({ startDate, endDate })
+    hourlyData.value = toHourlySeries(rangeResult?.hourlyData || [])
+  } catch (error) {
+    hourlyData.value = toHourlySeries([])
+  }
+
+  const records = await Promise.all(dateList.map(async (dateText) => {
+    try {
+      const result = await getHourlyActivity({ startDate: dateText, endDate: dateText })
+      return { dateText, result }
+    } catch (error) {
+      return { dateText, result: null }
+    }
+  }))
+
+  heatmapDayLabels.value = records.map((record) => {
+    const date = new Date(record.dateText)
+    const weekday = days[date.getDay() === 0 ? 6 : date.getDay() - 1]
+    return `${record.dateText.slice(5)} ${weekday}`
   })
 
-  // 运动类型分布图
-  const exerciseTypeChart = echarts.init(exerciseTypeChartRef.value)
+  heatmapData.value = records.flatMap((record, dayIndex) => {
+    const mapByHour = new Map(
+      ((record.result?.hourlyData || []).map((item) => [Number(item.hour), Number(item.count || 0)]))
+    )
+
+    return Array.from({ length: 24 }, (_, hour) => [hour, dayIndex, mapByHour.get(hour) || 0])
+  })
+}
+
+const buildUserGrowthSeries = (totalUsers, activeUsers) => {
+  const points = 6
+  const safeTotal = Math.max(0, Number(totalUsers || 0))
+  const safeActive = Math.max(0, Number(activeUsers || 0))
+  const estimatedStart = Math.max(0, safeTotal - safeActive)
+  const step = points > 1 ? (safeTotal - estimatedStart) / (points - 1) : safeTotal
+
+  return Array.from({ length: points }, (_, index) => Math.round(estimatedStart + step * index))
+}
+
+const resizeCharts = () => {
+  chartInstances.forEach((chart) => chart.resize())
+}
+
+const getOrCreateChart = (refEl) => {
+  if (!refEl) {
+    return null
+  }
+
+  const existing = echarts.getInstanceByDom(refEl)
+  const chart = existing || initChart(refEl)
+
+  if (!chartInstances.includes(chart)) {
+    chartInstances.push(chart)
+  }
+
+  return chart
+}
+
+const initCharts = () => {
+  initUserGrowthChart()
+  initExerciseTypeChart()
+  initPeakHourChart()
+  initEquipmentUsageChart()
+  initHeatmapChart()
+}
+
+const initUserGrowthChart = () => {
+  if (!userGrowthChartRef.value) return
+  const userGrowthChart = getOrCreateChart(userGrowthChartRef.value)
+  if (!userGrowthChart) return
+
+  userGrowthChart.setOption({
+    tooltip: { trigger: 'axis' },
+    xAxis: { type: 'category', data: ['T-5', 'T-4', 'T-3', 'T-2', 'T-1', '今日'] },
+    yAxis: { type: 'value', name: '用户数' },
+    series: [{
+      data: userGrowthSeries.value,
+      type: 'line',
+      smooth: true,
+      itemStyle: { color: CHART_COLORS[0] },
+      areaStyle: { color: 'rgba(74, 144, 255, 0.2)' }
+    }]
+  })
+}
+
+const initExerciseTypeChart = () => {
+  if (!exerciseTypeChartRef.value) return
+  const exerciseTypeChart = getOrCreateChart(exerciseTypeChartRef.value)
+  if (!exerciseTypeChart) return
+
   exerciseTypeChart.setOption({
     tooltip: { trigger: 'item' },
     legend: { orient: 'vertical', left: 'left' },
     series: [{
       type: 'pie',
       radius: '60%',
-      data: [
-        { value: 35, name: '跑步' },
-        { value: 25, name: '动感单车' },
-        { value: 20, name: '力量训练' },
-        { value: 15, name: '游泳' },
-        { value: 5, name: '其他' }
-      ]
+      data: exercisePreferenceData.value.map((item) => ({
+        value: Number(item.count || 0),
+        name: item.exerciseType || '未分类'
+      }))
     }]
   })
+}
 
-  // 高峰期分析图
-  const peakHourChart = echarts.init(peakHourChartRef.value)
+const initPeakHourChart = () => {
+  if (!peakHourChartRef.value) return
+  const peakHourChart = getOrCreateChart(peakHourChartRef.value)
+  if (!peakHourChart) return
+
   peakHourChart.setOption({
     tooltip: { trigger: 'axis' },
     xAxis: {
       type: 'category',
-      data: ['6:00', '8:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00']
+      data: hourlyData.value.map((item) => `${item.hour}:00`)
     },
     yAxis: { type: 'value', name: '人数' },
     series: [{
-      data: [20, 45, 30, 25, 35, 40, 80, 90, 50],
+      data: hourlyData.value.map((item) => item.count),
       type: 'bar',
-      itemStyle: { color: '#67c23a' }
+      itemStyle: { color: CHART_COLORS[1] }
     }]
   })
+}
 
-  // 器材使用率图
-  const equipmentUsageChart = echarts.init(equipmentUsageChartRef.value)
+const initEquipmentUsageChart = () => {
+  if (!equipmentUsageChartRef.value) return
+  const equipmentUsageChart = getOrCreateChart(equipmentUsageChartRef.value)
+  if (!equipmentUsageChart) return
+
+  const topRows = equipmentUsageRows.value.slice(0, 10)
+  const maxCount = Math.max(...topRows.map((item) => item.count), 1)
+
   equipmentUsageChart.setOption({
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
     xAxis: { type: 'value', max: 100, name: '使用率(%)' },
     yAxis: {
       type: 'category',
-      data: ['跑步机', '动感单车', '椭圆机', '划船机', '哑铃', '杠铃', '史密斯机']
+      data: topRows.map((item) => item.name)
     },
     series: [{
       type: 'bar',
-      data: [85, 75, 60, 45, 90, 70, 55],
+      data: topRows.map((item) => Math.round((item.count / maxCount) * 100)),
       itemStyle: {
         color: (params) => {
-          const colors = ['#f56c6c', '#e6a23c', '#67c23a']
+          const colors = [CHART_COLORS[6], CHART_COLORS[5], CHART_COLORS[1]]
           if (params.value >= 80) return colors[0]
           if (params.value >= 60) return colors[1]
           return colors[2]
@@ -295,35 +518,18 @@ const initCharts = () => {
 
 const initHeatmapChart = () => {
   if (!heatmapChartRef.value) return
-  const chart = echarts.init(heatmapChartRef.value)
-  
-  const hours = ['6:00', '7:00', '8:00', '9:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00']
-  const days = ['周日', '周六', '周五', '周四', '周三', '周二', '周一']
-  
-  // 生成热力图数据
-  const data = []
-  for (let i = 0; i < days.length; i++) {
-    for (let j = 0; j < hours.length; j++) {
-      // 模拟真实的健身房人流规律
-      let value = 20
-      if (j >= 11 && j <= 13) value = 60 + Math.random() * 30 // 晚高峰
-      else if (j >= 5 && j <= 7) value = 40 + Math.random() * 20 // 早高峰
-      else if (j >= 3 && j <= 5) value = 30 + Math.random() * 15 // 午间
-      else value = 15 + Math.random() * 20
-      
-      // 周末人流更多
-      if (i <= 1) value *= 1.2
-      
-      data.push([j, i, Math.round(value)])
-    }
-  }
-  
+  const chart = getOrCreateChart(heatmapChartRef.value)
+  if (!chart) return
+
+  const maxValue = Math.max(...heatmapData.value.map((item) => item[2]), 1)
+  const yAxisLabels = heatmapDayLabels.value.length ? heatmapDayLabels.value : days
+
   chart.setOption({
     tooltip: {
       position: 'top',
-      formatter: (params) => `${days[params.value[1]]} ${hours[params.value[0]]}<br/>在馆人数: <b>${params.value[2]}</b> 人`
+      formatter: (params) => `${yAxisLabels[params.value[1]]} ${hours[params.value[0]]}<br/>活跃人数: <b>${params.value[2]}</b> 人`
     },
-    grid: { height: '70%', top: '5%', left: '15%', right: '10%' },
+    grid: { height: '70%', top: '5%', left: '10%', right: '6%' },
     xAxis: {
       type: 'category',
       data: hours,
@@ -332,26 +538,26 @@ const initHeatmapChart = () => {
     },
     yAxis: {
       type: 'category',
-      data: days,
+      data: yAxisLabels,
       splitArea: { show: true }
     },
     visualMap: {
       min: 0,
-      max: 100,
+      max: maxValue,
       calculable: true,
       orient: 'horizontal',
       left: 'center',
       bottom: '0%',
       inRange: {
-        color: ['#ebeef5', '#b3d8ff', '#409eff', '#e6a23c', '#f56c6c']
+        color: HEATMAP_GRADIENT
       },
       text: ['拥挤', '空闲'],
       textStyle: { fontSize: 11 }
     },
     series: [{
-      name: '在馆人数',
+      name: '活跃人数',
       type: 'heatmap',
-      data: data,
+      data: heatmapData.value,
       label: { show: false },
       emphasis: {
         itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0, 0, 0, 0.5)' }
@@ -433,54 +639,42 @@ const initHeatmapChart = () => {
   height: 12px;
   border-radius: 50%;
   margin-right: 12px;
-  animation: pulse 2s infinite;
 }
 
 .current-status.normal .status-indicator {
   background: #67c23a;
-  box-shadow: 0 0 8px #67c23a;
 }
 
 .current-status.busy .status-indicator {
   background: #e6a23c;
-  box-shadow: 0 0 8px #e6a23c;
 }
 
 .current-status.crowded .status-indicator {
   background: #f56c6c;
-  box-shadow: 0 0 8px #f56c6c;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-.status-info {
-  flex: 1;
 }
 
 .status-title {
   font-size: 16px;
-  font-weight: bold;
+  font-weight: 600;
   color: #303133;
 }
 
 .status-count {
-  font-size: 12px;
-  color: #909399;
+  font-size: 13px;
+  color: #606266;
   margin-top: 4px;
 }
 
 .peak-info-list {
-  padding: 10px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .peak-info-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 0;
 }
 
 .peak-info-item .label {
@@ -489,7 +683,7 @@ const initHeatmapChart = () => {
 }
 
 .peak-info-item .value {
-  font-weight: bold;
   color: #303133;
+  font-weight: 600;
 }
 </style>

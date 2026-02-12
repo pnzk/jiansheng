@@ -70,15 +70,15 @@
         <div v-show="currentStep === 2">
           <el-form-item label="我是" prop="role">
             <div class="role-cards">
-              <div class="role-card" :class="{ active: form.role === 'STUDENT' }" @click="form.role = 'STUDENT'">
+              <div class="role-card active">
                 <div class="role-icon">🎓</div>
                 <div class="role-name">学员</div>
                 <div class="role-desc">我想科学健身</div>
               </div>
-              <div class="role-card" :class="{ active: form.role === 'COACH' }" @click="form.role = 'COACH'">
+              <div class="role-card disabled">
                 <div class="role-icon">🏋️</div>
                 <div class="role-name">教练</div>
-                <div class="role-desc">我想指导学员</div>
+                <div class="role-desc">由管理员统一创建</div>
               </div>
             </div>
           </el-form-item>
@@ -198,6 +198,7 @@ const handleRegister = async () => {
   loading.value = true
   try {
     const { confirmPassword, ...data } = form
+    data.role = 'STUDENT'
     await register(data)
     
     ElMessage.success('注册成功，请登录')
@@ -217,7 +218,7 @@ const handleRegister = async () => {
   align-items: center;
   min-height: 100vh;
   padding: 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #4a90ff 0%, #6f63ff 100%);
   position: relative;
   overflow: hidden;
 }
@@ -259,7 +260,7 @@ const handleRegister = async () => {
   width: 520px;
   padding: 30px;
   border-radius: 16px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 20px 48px rgba(74, 112, 255, 0.24);
   z-index: 1;
 }
 
@@ -307,6 +308,12 @@ const handleRegister = async () => {
 .role-card.active {
   border-color: #409eff;
   background: #ecf5ff;
+}
+
+.role-card.disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  border-style: dashed;
 }
 
 .role-icon {

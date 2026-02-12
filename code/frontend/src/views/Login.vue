@@ -19,7 +19,7 @@
           <el-input v-model="form.password" type="password" placeholder="请输入密码" prefix-icon="Lock" size="large" show-password @keyup.enter="handleLogin" />
         </el-form-item>
         <div class="form-options">
-          <el-checkbox v-model="rememberMe">记住密码</el-checkbox>
+          <el-checkbox v-model="rememberMe">记住登录账号</el-checkbox>
           <el-button text type="primary" size="small">忘记密码？</el-button>
         </div>
         <el-form-item>
@@ -31,13 +31,13 @@
           <span>或使用以下方式登录</span>
         </div>
         <div class="quick-login">
-          <el-button @click="quickLogin('test_student')" round>
+          <el-button @click="quickLogin('survey_user_1')" round>
             <span class="quick-icon">🎓</span> 学员体验
           </el-button>
-          <el-button @click="quickLogin('test_coach')" round>
+          <el-button @click="quickLogin('coach_auto_001')" round>
             <span class="quick-icon">🏋️</span> 教练体验
           </el-button>
-          <el-button @click="quickLogin('test_admin')" round>
+          <el-button @click="quickLogin('admin_auto_001')" round>
             <span class="quick-icon">👨‍💼</span> 管理员
           </el-button>
         </div>
@@ -73,10 +73,8 @@ const rules = {
 
 onMounted(() => {
   const savedUsername = localStorage.getItem('savedUsername')
-  const savedPassword = localStorage.getItem('savedPassword')
-  if (savedUsername && savedPassword) {
+  if (savedUsername) {
     form.username = savedUsername
-    form.password = savedPassword
     rememberMe.value = true
   }
 })
@@ -96,10 +94,8 @@ const handleLogin = async () => {
     
     if (rememberMe.value) {
       localStorage.setItem('savedUsername', form.username)
-      localStorage.setItem('savedPassword', form.password)
     } else {
       localStorage.removeItem('savedUsername')
-      localStorage.removeItem('savedPassword')
     }
     
     ElMessage.success('登录成功')
@@ -120,7 +116,7 @@ const handleLogin = async () => {
 
 const quickLogin = async (username) => {
   form.username = username
-  form.password = 'test123'
+  form.password = '123456'
   await handleLogin()
 }
 </script>
@@ -131,7 +127,7 @@ const quickLogin = async (username) => {
   justify-content: center;
   align-items: center;
   height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #4a90ff 0%, #6f63ff 100%);
   position: relative;
   overflow: hidden;
 }
@@ -182,7 +178,7 @@ const quickLogin = async (username) => {
   width: 420px;
   padding: 30px;
   border-radius: 16px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 20px 48px rgba(74, 112, 255, 0.24);
   z-index: 1;
 }
 

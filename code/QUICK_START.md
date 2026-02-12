@@ -20,7 +20,7 @@
 ## 二、一键启动（推荐）
 
 1. 确保 MySQL 服务已启动
-2. 双击运行 `quick-start.bat`
+2. 双击运行 `start-all.bat`（或 `quick-start.bat`，已作为别名）
 3. 等待脚本自动完成所有配置
 4. 浏览器自动打开 http://localhost:3000
 
@@ -28,27 +28,19 @@
 
 ## 三、手动启动
 
-### 步骤1：安装依赖
+### 步骤1：方案B迁移+启动
 ```bash
-install-deps.bat
+migrate-and-start.bat
 ```
 
-### 步骤2：初始化数据库
+### 步骤2：仅迁移不启动（可选）
 ```bash
-init-database.bat
+migrate-and-start.bat --no-start --no-pause
 ```
-> 默认数据库配置：用户名 `root`，密码 `123456`
-> 如需修改，请编辑脚本中的 `DB_USER` 和 `DB_PASS`
 
-### 步骤3：导入数据（可选）
+### 步骤3：大数据模式（可选）
 ```bash
-import-data.bat
-```
-> 导入清洗后的真实健身数据（约42000条记录）
-
-### 步骤4：启动系统
-```bash
-start-all.bat
+migrate-and-start.bat --large
 ```
 
 ### 停止系统
@@ -114,8 +106,10 @@ code/
 ├── data-processing/  # 数据清洗脚本
 │   └── cleaned/      # 清洗后的CSV数据
 ├── csv/              # 原始数据文件
-├── quick-start.bat   # 一键启动（推荐）
-├── start-all.bat     # 启动服务
+├── start-all.bat     # IDEA一键入口（推荐）
+├── quick-start.bat   # start-all 别名
+├── migrate-and-start.bat # 迁移+启动
+├── migrate-scheme-b.bat  # 仅迁移
 ├── stop.bat          # 停止服务
 ├── check-env.bat     # 环境检测
 ├── install-deps.bat  # 安装依赖

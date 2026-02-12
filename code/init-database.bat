@@ -1,94 +1,172 @@
 @echo off
 chcp 65001 >nul
-setlocal
+setlocal enabledelayedexpansion
 
 echo ========================================
-echo    健身管理系统 - 数据库初始化
+echo    Gym Fitness System - Database Init
 echo ========================================
 echo.
 
-:: 获取脚本所在目录
 cd /d "%~dp0"
 set "PROJECT_ROOT=%cd%"
 
-:: 数据库配置
 set "DB_HOST=localhost"
+set "DB_PORT=3306"
 set "DB_USER=root"
 set "DB_PASS=123456"
 set "DB_NAME=gym_fitness_analytics"
+set "SEED_TEST_DATA=0"
+set "NO_PAUSE=0"
 
-echo 数据库配置:
-echo   主机: %DB_HOST%
-echo   用户: %DB_USER%
-echo   数据库: %DB_NAME%
+if /I "%~1"=="--with-test-data" (
+    set "SEED_TEST_DATA=1"
+)
+if /I "%~1"=="--no-pause" (
+    set "NO_PAUSE=1"
+)
+
+set "MYSQL_CMD=mysql"
+call :resolve_mysql
+if errorlevel 1 (
+    echo [X] MySQL client not found.
+    echo     Please install MySQL client or add mysql.exe to PATH.
+    echo     Checked common path: C:\Program Files\MySQL\MySQL Server 8.4\bin\mysql.exe
+    if "%NO_PAUSE%"=="0" pause
+    exit /b 1
+)
+
+echo Database config:
+echo   Host : %DB_HOST%
+echo   Port : %DB_PORT%
+echo   User : %DB_USER%
+echo   DB   : %DB_NAME%
+echo   CLI  : %MYSQL_CMD%
 echo.
 
-:: 检测 MySQL 连接
-echo [1/3] 检测数据库连接...
-mysql -h%DB_HOST% -u%DB_USER% -p%DB_PASS% -e "SELECT 1" >nul 2>&1
+echo [1/3] Checking database connection...
+call "%MYSQL_CMD%" -h%DB_HOST% -P%DB_PORT% -u%DB_USER% -p%DB_PASS% -e "SELECT 1" >nul 2>&1
 if errorlevel 1 (
-    echo ✗ 无法连接到 MySQL 服务器
-    echo   请确保:
-    echo   1. MySQL 服务已启动
-    echo   2. 用户名和密码正确 (默认: root/123456)
+    echo [X] Cannot connect to MySQL.
+    echo     Please check:
+    echo       1^) MySQL service is running
+    echo       2^) DB_USER/DB_PASS in this script are correct
+    echo       3^) Host/Port are correct
     echo.
-    echo   如需修改数据库配置，请编辑此脚本中的 DB_USER 和 DB_PASS
-    pause
+    echo     Current: %DB_USER% / %DB_PASS% @ %DB_HOST%:%DB_PORT%
+    if "%NO_PAUSE%"=="0" pause
     exit /b 1
 )
-echo ✓ 数据库连接成功
+echo [OK] MySQL connection passed.
 echo.
 
-:: 创建数据库
-echo [2/3] 创建数据库...
-mysql -h%DB_HOST% -u%DB_USER% -p%DB_PASS% -e "CREATE DATABASE IF NOT EXISTS %DB_NAME% CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+echo [2/3] Creating database if not exists...
+call "%MYSQL_CMD%" -h%DB_HOST% -P%DB_PORT% -u%DB_USER% -p%DB_PASS% -e "CREATE DATABASE IF NOT EXISTS %DB_NAME% CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" >nul 2>&1
 if errorlevel 1 (
-    echo ✗ 创建数据库失败
-    pause
+    echo [X] Failed to create database %DB_NAME%.
+    if "%NO_PAUSE%"=="0" pause
     exit /b 1
 )
-echo ✓ 数据库 %DB_NAME% 已创建
+echo [OK] Database %DB_NAME% is ready.
 echo.
 
-:: 执行 schema.sql
-echo [3/3] 初始化数据表...
+echo [3/3] Initializing schema...
 if exist "%PROJECT_ROOT%\database\schema.sql" (
-    mysql -h%DB_HOST% -u%DB_USER% -p%DB_PASS% %DB_NAME% < "%PROJECT_ROOT%\database\schema.sql"
+    call "%MYSQL_CMD%" -h%DB_HOST% -P%DB_PORT% -u%DB_USER% -p%DB_PASS% %DB_NAME% -e "DROP PROCEDURE IF EXISTS update_leaderboards;" >nul 2>&1
+    call "%MYSQL_CMD%" -h%DB_HOST% -P%DB_PORT% -u%DB_USER% -p%DB_PASS% %DB_NAME% < "%PROJECT_ROOT%\database\schema.sql"
     if errorlevel 1 (
-        echo ✗ 执行 schema.sql 失败
-        pause
+        echo [X] Failed to execute schema.sql.
+        if "%NO_PAUSE%"=="0" pause
         exit /b 1
     )
-    echo ✓ 数据表初始化完成
+    echo [OK] Schema initialized.
 ) else (
-    echo ⚠ 未找到 database\schema.sql，跳过表结构初始化
+    echo [WARN] schema.sql not found at database\schema.sql, skipped.
 )
 echo.
 
-:: 初始化测试数据
-echo [可选] 初始化测试数据...
-if exist "%PROJECT_ROOT%\database\init_test_data.py" (
-    python "%PROJECT_ROOT%\database\init_test_data.py" 2>nul
-    if errorlevel 1 (
-        echo ⚠ 测试数据初始化失败（可能缺少 Python 或 pymysql）
-        echo   可手动运行: python database\init_test_data.py
-    ) else (
-        echo ✓ 测试数据初始化完成
+echo [4/4] Data seeding policy...
+if "%SEED_TEST_DATA%"=="1" (
+    if not exist "%PROJECT_ROOT%\database\init_test_data.py" (
+        echo [X] init_test_data.py not found. Test-data mode unavailable.
+        echo [Tip] Keep clean mode or restore test data scripts first.
+        if "%NO_PAUSE%"=="0" pause
+        exit /b 1
+    )
+
+    echo [Info] Seeding test accounts and demo data enabled.
+    set "SEED_SQL=%TEMP%\gym_seed_test_users_%RANDOM%%RANDOM%.sql"
+    (
+        echo USE %DB_NAME%;
+        echo INSERT INTO users ^(username,password,email,real_name,user_role,show_in_leaderboard,allow_coach_view,created_at,updated_at^) VALUES
+        echo ^('test_student','\$2b\$12\$VfYg.4yGMh.zliVxEAJUq.k7.MaLT5AF0XsCvkyPAVK8AZr/Xsmsi','student@test.com','Test Student','STUDENT',1,1,NOW^(^),NOW^(^)^),
+        echo ^('test_coach','\$2b\$12\$VfYg.4yGMh.zliVxEAJUq.k7.MaLT5AF0XsCvkyPAVK8AZr/Xsmsi','coach@test.com','Test Coach','COACH',1,1,NOW^(^),NOW^(^)^),
+        echo ^('test_admin','\$2b\$12\$VfYg.4yGMh.zliVxEAJUq.k7.MaLT5AF0XsCvkyPAVK8AZr/Xsmsi','admin@test.com','Test Admin','ADMIN',1,1,NOW^(^),NOW^(^)^)
+        echo ON DUPLICATE KEY UPDATE
+        echo password=VALUES^(password^),
+        echo real_name=VALUES^(real_name^),
+        echo user_role=VALUES^(user_role^),
+        echo show_in_leaderboard=VALUES^(show_in_leaderboard^),
+        echo allow_coach_view=VALUES^(allow_coach_view^),
+        echo updated_at=NOW^(^);
+        echo SET @coach_id = ^(SELECT id FROM users WHERE username='test_coach' LIMIT 1^);
+        echo UPDATE users SET coach_id=@coach_id WHERE username='test_student';
+    ) > "%SEED_SQL%"
+
+    call "%MYSQL_CMD%" -h%DB_HOST% -P%DB_PORT% -u%DB_USER% -p%DB_PASS% < "%SEED_SQL%" >nul 2>&1
+    set "SEED_RC=%ERRORLEVEL%"
+    del /q "%SEED_SQL%" >nul 2>&1
+    if not "%SEED_RC%"=="0" (
+        echo [X] Failed to seed test accounts.
+        if "%NO_PAUSE%"=="0" pause
+        exit /b 1
+    )
+    echo [OK] Test accounts are ready. Password: test123
+    echo.
+
+    if exist "%PROJECT_ROOT%\database\init_test_data.py" (
+        echo [Optional] Initializing test data...
+        python "%PROJECT_ROOT%\database\init_test_data.py" >nul 2>&1
+        if errorlevel 1 (
+            echo [WARN] Test data init skipped/failed ^(Python or pymysql may be missing^).
+        ) else (
+            echo [OK] Test data initialized.
+        )
+        echo.
     )
 ) else (
-    echo ⚠ 未找到测试数据脚本，跳过
+    echo [OK] Clean mode: test accounts/data NOT imported.
+    echo [Tip] Run init-database.bat --with-test-data if you need demo data.
+    echo.
 )
-echo.
 
 echo ========================================
-echo ✓ 数据库初始化完成！
-echo.
-echo 测试账号:
-echo   学员: test_student / test123
-echo   教练: test_coach / test123
-echo   管理员: test_admin / test123
-echo.
-echo 下一步: 运行 start.bat 启动项目
+echo [OK] Database initialization completed.
+echo Next step: run start-all.bat ^(recommended^)
 echo ========================================
 echo.
-pause
+if "%NO_PAUSE%"=="0" pause
+exit /b 0
+
+:resolve_mysql
+where mysql >nul 2>&1
+if not errorlevel 1 (
+    set "MYSQL_CMD=mysql"
+    exit /b 0
+)
+
+if exist "C:\Program Files\MySQL\MySQL Server 8.4\bin\mysql.exe" (
+    set "MYSQL_CMD=C:\Program Files\MySQL\MySQL Server 8.4\bin\mysql.exe"
+    exit /b 0
+)
+
+if exist "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" (
+    set "MYSQL_CMD=C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe"
+    exit /b 0
+)
+
+if exist "C:\Program Files\MySQL\MySQL Server 9.0\bin\mysql.exe" (
+    set "MYSQL_CMD=C:\Program Files\MySQL\MySQL Server 9.0\bin\mysql.exe"
+    exit /b 0
+)
+
+exit /b 1

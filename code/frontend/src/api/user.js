@@ -19,3 +19,7 @@ export const updatePrivacySettings = (data) => {
 export const getCoachStudents = () => {
   return request.get('/user/coach/students')
 }
+
+export const handleCoachTodo = (data) => {
+  return request.post('/user/coach/todos/handle', data)
+}

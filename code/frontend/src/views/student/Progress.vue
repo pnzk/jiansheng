@@ -91,12 +91,14 @@ import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 import { getBodyMetricHistory, addBodyMetric } from '@/api/bodyMetric'
 import { getFitnessEffectAnalysis } from '@/api/analytics'
+import { initChart } from '@/utils/chartTheme'
 
 const dateRange = ref([])
 const showAddDialog = ref(false)
 const analysis = ref({})
 const weightChartRef = ref(null)
 const bodyFatChartRef = ref(null)
+const addingMetric = ref(false)
 let weightChart = null
 let bodyFatChart = null
 
@@ -127,27 +129,45 @@ const loadData = async () => {
 }
 
 const addMetric = async () => {
+  if (addingMetric.value) {
+    return
+  }
+
+  addingMetric.value = true
   try {
-    await addBodyMetric(addForm.value)
+    const payload = {
+      ...addForm.value,
+      measurementDate: formatDateValue(addForm.value.measurementDate)
+    }
+
+    await addBodyMetric(payload)
     ElMessage.success('添加成功')
     showAddDialog.value = false
-    loadData()
+    await loadData()
   } catch (error) {
     ElMessage.error('添加失败')
+  } finally {
+    addingMetric.value = false
   }
 }
 
 const renderCharts = (metrics) => {
   if (!weightChart) {
-    weightChart = echarts.init(weightChartRef.value)
+    weightChart = initChart(weightChartRef.value)
   }
   if (!bodyFatChart) {
-    bodyFatChart = echarts.init(bodyFatChartRef.value)
+    bodyFatChart = initChart(bodyFatChartRef.value)
   }
   
-  const dates = metrics.map(m => m.measurementDate)
-  const weights = metrics.map(m => m.weightKg)
-  const bodyFats = metrics.map(m => m.bodyFatPercentage)
+  const sortedMetrics = [...(metrics || [])].sort((left, right) => {
+    const leftDate = new Date(left.measurementDate).getTime()
+    const rightDate = new Date(right.measurementDate).getTime()
+    return leftDate - rightDate
+  })
+
+  const dates = sortedMetrics.map(m => m.measurementDate)
+  const weights = sortedMetrics.map(m => m.weightKg)
+  const bodyFats = sortedMetrics.map(m => m.bodyFatPercentage)
   
   weightChart.setOption({
     title: { text: '体重变化趋势' },
@@ -169,6 +189,22 @@ const renderCharts = (metrics) => {
 onMounted(() => {
   loadData()
 })
+
+const formatDateValue = (value) => {
+  if (!value) {
+    return null
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
 </script>
 
 <style scoped>

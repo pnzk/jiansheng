@@ -141,7 +141,7 @@
           <div class="plan-reminder" v-if="trainingPlan">
             <div class="plan-name">{{ trainingPlan.planName }}</div>
             <div class="plan-goal">
-              <el-tag :type="getGoalTagType(trainingPlan.goalType)">{{ trainingPlan.goalType }}</el-tag>
+              <el-tag :type="getGoalTagType(trainingPlan.goalType)">{{ formatGoalType(trainingPlan.goalType) }}</el-tag>
             </div>
             <el-divider />
             <div class="today-plan">
@@ -185,7 +185,7 @@
       <el-col :span="12">
         <el-card>
           <template #header>
-            <span>本周运动热力图</span>
+            <span>{{ heatmapTitle }}</span>
           </template>
           <div ref="heatmapChartRef" style="height: 300px"></div>
         </el-card>
@@ -195,16 +195,31 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, computed, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import { getLatestBodyMetric, getBodyMetricHistory } from '@/api/bodyMetric'
-import { getExerciseStatistics } from '@/api/exercise'
+import { getExerciseStatistics, getUserExerciseRecords } from '@/api/exercise'
 import { getMyTrainingPlan } from '@/api/trainingPlan'
 import { getPeakHourWarning } from '@/api/analytics'
+import { CHART_COLORS, HEATMAP_GRADIENT, initChart } from '@/utils/chartTheme'
 
 const weightChartRef = ref(null)
 const exerciseChartRef = ref(null)
 const heatmapChartRef = ref(null)
+const exerciseRecords = ref([])
+const heatmapTitle = ref('本周运动热力图')
+const chartInstances = []
+const EXERCISE_TYPE_LABELS = {
+  RUNNING: '跑步',
+  CYCLING: '骑行',
+  SWIMMING: '游泳',
+  STRENGTH_TRAINING: '力量训练',
+  YOGA: '瑜伽',
+  HIIT: 'HIIT',
+  WALKING: '步行',
+  BOXING: '拳击',
+  PILATES: '普拉提'
+}
 
 const stats = reactive({
   weight: 0,
@@ -232,10 +247,60 @@ const trainingPlan = ref(null)
 
 const todaySchedule = computed(() => {
   if (!trainingPlan.value?.weeklySchedule) return []
+
+  let schedule = trainingPlan.value.weeklySchedule
+  if (typeof schedule === 'string') {
+    try {
+      schedule = JSON.parse(schedule)
+    } catch (e) {
+      return []
+    }
+  }
+
+  if (!schedule || typeof schedule !== 'object') {
+    return []
+  }
+
   const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
   const today = days[new Date().getDay()]
-  return trainingPlan.value.weeklySchedule[today] || []
+  const todayValue = schedule[today]
+
+  if (Array.isArray(todayValue)) {
+    return todayValue
+  }
+  if (typeof todayValue === 'string') {
+    return todayValue
+      .split(/[、,，\n]/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
+  return []
 })
+
+const normalizeRecords = (records) => {
+  return (Array.isArray(records) ? records : []).filter((item) => item && item.exerciseDate)
+}
+
+const getOrCreateChart = (domRef) => {
+  if (!domRef) {
+    return null
+  }
+
+  let chart = echarts.getInstanceByDom(domRef)
+  if (!chart) {
+    chart = initChart(domRef)
+  }
+
+  if (!chartInstances.includes(chart)) {
+    chartInstances.push(chart)
+  }
+
+  return chart
+}
+
+const resizeCharts = () => {
+  chartInstances.forEach((chart) => chart.resize())
+}
 
 const getBmiStatus = (bmi) => {
   if (bmi < 18.5) return { text: '偏瘦', class: 'warning' }
@@ -244,39 +309,146 @@ const getBmiStatus = (bmi) => {
   return { text: '肥胖', class: 'negative' }
 }
 
+const formatExerciseType = (type) => {
+  const raw = `${type || ''}`.trim().toUpperCase()
+  if (!raw) {
+    return '其他'
+  }
+  return EXERCISE_TYPE_LABELS[raw] || type || '其他'
+}
+
+const getRecentDaysRange = (days = 30) => {
+  const end = new Date()
+  end.setHours(23, 59, 59, 999)
+
+  const start = new Date(end)
+  start.setDate(end.getDate() - (days - 1))
+  start.setHours(0, 0, 0, 0)
+
+  return {
+    startDate: formatDateParam(start),
+    endDate: formatDateParam(end)
+  }
+}
+
+const getRecordHour = (record) => {
+  const dateLike = record?.createdAt || record?.updatedAt || record?.exerciseDate
+  if (!dateLike) {
+    return 18
+  }
+
+  if (typeof dateLike === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateLike)) {
+    return 18
+  }
+
+  const date = new Date(dateLike)
+  if (Number.isNaN(date.getTime())) {
+    return 18
+  }
+
+  return date.getHours()
+}
+
+const getHeatmapHourIndex = (hour) => {
+  if (hour < 7) return 0
+  if (hour < 9) return 1
+  if (hour < 11) return 2
+  if (hour < 13) return 3
+  if (hour < 15) return 4
+  if (hour < 17) return 5
+  if (hour < 19) return 6
+  if (hour < 21) return 7
+  return 8
+}
+
 const getGoalTagType = (goalType) => {
-  const types = { '减重': 'danger', '减脂': 'warning', '增肌': 'success' }
-  return types[goalType] || 'info'
+  const raw = `${goalType || ''}`.trim().toUpperCase()
+  const types = {
+    WEIGHT_LOSS: 'danger',
+    FAT_LOSS: 'warning',
+    MUSCLE_GAIN: 'success',
+    '减重': 'danger',
+    '减脂': 'warning',
+    '增肌': 'success'
+  }
+  return types[raw] || types[goalType] || 'info'
+}
+
+const formatGoalType = (goalType) => {
+  const raw = `${goalType || ''}`.trim().toUpperCase()
+  const map = {
+    WEIGHT_LOSS: '减重',
+    FAT_LOSS: '减脂',
+    MUSCLE_GAIN: '增肌'
+  }
+  return map[raw] || goalType || '未设置目标'
 }
 
 const loadData = async () => {
+  const { weekStart, weekEnd } = getCurrentWeekRange()
+
   // 加载最新身体指标
   try {
     const latestMetric = await getLatestBodyMetric()
     if (latestMetric) {
-      stats.weight = latestMetric.weightKg || 70
-      stats.bodyFat = latestMetric.bodyFatPercentage || 20
-      stats.bmi = latestMetric.bmi || 22
+      stats.weight = latestMetric.weightKg || 0
+      stats.bodyFat = latestMetric.bodyFatPercentage || 0
+      stats.bmi = latestMetric.bmi || 0
     }
   } catch (e) {
-    stats.weight = 70
-    stats.bodyFat = 20
-    stats.bmi = 22
+    stats.weight = 0
+    stats.bodyFat = 0
+    stats.bmi = 0
   }
   
   // 加载运动统计
   try {
-    const exerciseStats = await getExerciseStatistics()
+    const exerciseStats = await getExerciseStatistics({
+      startDate: formatDateParam(weekStart),
+      endDate: formatDateParam(weekEnd)
+    })
     if (exerciseStats) {
-      weekStats.exerciseCount = exerciseStats.weekExerciseCount || 5
-      weekStats.totalDuration = exerciseStats.weekTotalDuration || 180
-      weekStats.totalCalories = exerciseStats.weekTotalCalories || 1500
+      weekStats.exerciseCount = exerciseStats.totalRecords || 0
+      weekStats.totalDuration = exerciseStats.totalDurationMinutes || 0
+      weekStats.totalCalories = Math.round(exerciseStats.totalCaloriesBurned || 0)
     }
   } catch (e) {
-    weekStats.exerciseCount = 5
-    weekStats.totalDuration = 180
-    weekStats.totalCalories = 1500
+    weekStats.exerciseCount = 0
+    weekStats.totalDuration = 0
+    weekStats.totalCalories = 0
   }
+
+  // 加载运动记录并驱动图表
+  const { startDate: monthStart, endDate: monthEnd } = getRecentDaysRange(30)
+  let weeklyRecords = []
+  let monthlyRecords = []
+  try {
+    const records = await getUserExerciseRecords({
+      startDate: formatDateParam(weekStart),
+      endDate: formatDateParam(weekEnd)
+    })
+    weeklyRecords = normalizeRecords(records)
+  } catch (e) {
+    weeklyRecords = []
+  }
+
+  try {
+    const records = await getUserExerciseRecords({
+      startDate: monthStart,
+      endDate: monthEnd
+    })
+    monthlyRecords = normalizeRecords(records)
+  } catch (e) {
+    monthlyRecords = []
+  }
+
+  exerciseRecords.value = weeklyRecords
+
+  const chartRecords = monthlyRecords.length ? monthlyRecords : weeklyRecords
+  heatmapTitle.value = monthlyRecords.length ? '近30天运动热力图' : '本周运动热力图'
+
+  initExerciseChart(chartRecords)
+  initHeatmapChart(chartRecords)
   
   // 加载训练计划
   try {
@@ -290,7 +462,20 @@ const loadData = async () => {
   try {
     const warning = await getPeakHourWarning()
     if (warning) {
-      Object.assign(peakWarning, warning)
+      const peakHour = Number(warning.peakHour)
+      const validPeakHour = Number.isFinite(peakHour) ? peakHour : null
+
+      peakWarning.level = warning.isPeakHour ? 'peak' : 'normal'
+      peakWarning.currentStatus = warning.isPeakHour ? '当前高峰' : '当前空闲'
+      peakWarning.currentCount = Number(warning.currentCount || 0)
+
+      if (validPeakHour != null) {
+        const nextHour = (validPeakHour + 1) % 24
+        const suggestedStart = (validPeakHour + 2) % 24
+        const suggestedEnd = (validPeakHour + 3) % 24
+        peakWarning.peakHours = `${String(validPeakHour).padStart(2, '0')}:00-${String(nextHour).padStart(2, '0')}:59`
+        peakWarning.suggestedHours = `${String(suggestedStart).padStart(2, '0')}:00-${String(suggestedEnd).padStart(2, '0')}:59`
+      }
     }
   } catch (e) {
     // 使用默认值
@@ -306,17 +491,60 @@ const loadData = async () => {
 }
 
 onMounted(() => {
-  loadData()
-  initExerciseChart()
-  initHeatmapChart()
+  loadData().then(() => {
+    nextTick(() => {
+      resizeCharts()
+      setTimeout(resizeCharts, 200)
+    })
+  })
+  window.addEventListener('resize', resizeCharts)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', resizeCharts)
+  chartInstances.forEach((chart) => chart.dispose())
+  chartInstances.length = 0
 })
 
 const renderWeightChart = (history) => {
   if (!weightChartRef.value) return
-  const chart = echarts.init(weightChartRef.value)
-  
-  const dates = history?.map(m => m.measurementDate) || ['1月', '2月', '3月', '4月', '5月', '6月']
-  const weights = history?.map(m => m.weightKg) || [70, 68, 67, 66.5, 66, 65.5]
+  const chart = getOrCreateChart(weightChartRef.value)
+  if (!chart) {
+    return
+  }
+
+  const sortedHistory = Array.isArray(history)
+    ? [...history]
+      .filter((item) => item && item.measurementDate && item.weightKg != null)
+      .sort((left, right) => new Date(left.measurementDate) - new Date(right.measurementDate))
+    : []
+
+  const dates = sortedHistory.map((item) => item.measurementDate)
+  const weights = sortedHistory.map((item) => Number(item.weightKg || 0))
+
+  if (weights.length >= 2) {
+    const latest = weights[weights.length - 1]
+    const previous = weights[weights.length - 2]
+    stats.weightChange = Number((latest - previous).toFixed(1))
+  } else {
+    stats.weightChange = 0
+  }
+
+  const bodyFatValues = sortedHistory
+    .map((item) => Number(item.bodyFatPercentage))
+    .filter((value) => Number.isFinite(value))
+  if (bodyFatValues.length >= 2) {
+    const latest = bodyFatValues[bodyFatValues.length - 1]
+    const previous = bodyFatValues[bodyFatValues.length - 2]
+    stats.bodyFatChange = Number((latest - previous).toFixed(1))
+  } else {
+    stats.bodyFatChange = 0
+  }
+
+  if (!dates.length || !weights.length) {
+    chart.clear()
+    return
+  }
   
   chart.setOption({
     tooltip: { trigger: 'axis' },
@@ -329,15 +557,34 @@ const renderWeightChart = (history) => {
       type: 'line',
       smooth: true,
       areaStyle: { opacity: 0.3 },
-      itemStyle: { color: '#409eff' },
+      itemStyle: { color: CHART_COLORS[0] },
       lineStyle: { width: 3 }
     }]
   })
 }
 
-const initExerciseChart = () => {
+const initExerciseChart = (records) => {
   if (!exerciseChartRef.value) return
-  const chart = echarts.init(exerciseChartRef.value)
+  const chart = getOrCreateChart(exerciseChartRef.value)
+  if (!chart) {
+    return
+  }
+
+  const grouped = (Array.isArray(records) ? records : []).reduce((acc, item) => {
+    const type = formatExerciseType(item?.exerciseType)
+    acc[type] = (acc[type] || 0) + 1
+    return acc
+  }, {})
+
+  const pieData = Object.entries(grouped)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+
+  if (!pieData.length) {
+    chart.clear()
+    return
+  }
+
   chart.setOption({
     tooltip: { trigger: 'item', formatter: '{b}: {c}次 ({d}%)' },
     legend: { orient: 'vertical', left: 'left' },
@@ -351,31 +598,52 @@ const initExerciseChart = () => {
         label: { show: true, fontSize: 20, fontWeight: 'bold' }
       },
       labelLine: { show: false },
-      data: [
-        { value: 5, name: '跑步', itemStyle: { color: '#409eff' } },
-        { value: 3, name: '动感单车', itemStyle: { color: '#67c23a' } },
-        { value: 2, name: '游泳', itemStyle: { color: '#e6a23c' } },
-        { value: 2, name: '力量训练', itemStyle: { color: '#f56c6c' } },
-        { value: 1, name: '瑜伽', itemStyle: { color: '#909399' } }
-      ]
+      data: pieData
     }]
   })
 }
 
-const initHeatmapChart = () => {
+const initHeatmapChart = (records) => {
   if (!heatmapChartRef.value) return
-  const chart = echarts.init(heatmapChartRef.value)
+  const chart = getOrCreateChart(heatmapChartRef.value)
+  if (!chart) {
+    return
+  }
   
   const hours = ['6:00', '8:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00']
-  const days = ['周日', '周六', '周五', '周四', '周三', '周二', '周一']
+  const days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+  const dayIndexMap = { 1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 0: 6 }
   
-  // 模拟热力图数据
+  const matrix = Array.from({ length: days.length }, () => Array(hours.length).fill(0))
+
+  ;(Array.isArray(records) ? records : []).forEach((record) => {
+    if (!record?.exerciseDate) {
+      return
+    }
+
+    const date = new Date(record.exerciseDate)
+    if (Number.isNaN(date.getTime())) {
+      return
+    }
+
+    const rowIndex = dayIndexMap[date.getDay()]
+    if (rowIndex == null) {
+      return
+    }
+    const hour = getRecordHour(record)
+    const hourIndex = getHeatmapHourIndex(hour)
+
+    matrix[rowIndex][hourIndex] += Number(record.durationMinutes || 0)
+  })
+
   const data = []
   for (let i = 0; i < days.length; i++) {
     for (let j = 0; j < hours.length; j++) {
-      data.push([j, i, Math.floor(Math.random() * 60)])
+      data.push([j, i, matrix[i][j]])
     }
   }
+
+  const maxValue = data.reduce((max, item) => (item[2] > max ? item[2] : max), 0)
   
   chart.setOption({
     tooltip: { position: 'top', formatter: (p) => `${days[p.value[1]]} ${hours[p.value[0]]}: ${p.value[2]}分钟` },
@@ -383,8 +651,13 @@ const initHeatmapChart = () => {
     xAxis: { type: 'category', data: hours, splitArea: { show: true } },
     yAxis: { type: 'category', data: days, splitArea: { show: true } },
     visualMap: {
-      min: 0, max: 60, calculable: true, orient: 'horizontal', left: 'center', bottom: '5%',
-      inRange: { color: ['#ebeef5', '#409eff', '#67c23a', '#e6a23c', '#f56c6c'] }
+      min: 0,
+      max: Math.max(maxValue, 60),
+      calculable: true,
+      orient: 'horizontal',
+      left: 'center',
+      bottom: '5%',
+      inRange: { color: HEATMAP_GRADIENT }
     },
     series: [{
       name: '运动时长',
@@ -394,6 +667,32 @@ const initHeatmapChart = () => {
       emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0, 0, 0, 0.5)' } }
     }]
   })
+}
+
+const getCurrentWeekRange = () => {
+  const now = new Date()
+  const day = now.getDay()
+  const diff = day === 0 ? 6 : day - 1
+
+  const weekStart = new Date(now)
+  weekStart.setDate(now.getDate() - diff)
+  weekStart.setHours(0, 0, 0, 0)
+
+  const weekEnd = new Date(weekStart)
+  weekEnd.setDate(weekStart.getDate() + 6)
+  weekEnd.setHours(23, 59, 59, 999)
+
+  return { weekStart, weekEnd }
+}
+
+const formatDateParam = (date) => {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return ''
+  }
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 </script>
 

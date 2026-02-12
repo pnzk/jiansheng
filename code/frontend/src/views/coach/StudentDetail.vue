@@ -6,7 +6,6 @@
       </template>
     </el-page-header>
 
-    <!-- 学员基本信息 -->
     <el-card style="margin-top: 20px">
       <template #header>
         <span>基本信息</span>
@@ -20,14 +19,13 @@
         <el-descriptions-item label="初始体重">{{ studentInfo.initialWeight }}kg</el-descriptions-item>
         <el-descriptions-item label="当前体重">{{ studentInfo.currentWeight }}kg</el-descriptions-item>
         <el-descriptions-item label="体重变化">
-          <span :style="{ color: weightChange >= 0 ? '#f56c6c' : '#67c23a' }">
-            {{ weightChange >= 0 ? '+' : '' }}{{ weightChange }}kg
+          <span :style="{ color: Number(weightChange) >= 0 ? '#f56c6c' : '#67c23a' }">
+            {{ Number(weightChange) >= 0 ? '+' : '' }}{{ weightChange }}kg
           </span>
         </el-descriptions-item>
       </el-descriptions>
     </el-card>
 
-    <!-- 当前身体指标 -->
     <el-row :gutter="20" style="margin-top: 20px">
       <el-col :span="6">
         <el-card>
@@ -63,7 +61,6 @@
       </el-col>
     </el-row>
 
-    <!-- 图表区 -->
     <el-row :gutter="20" style="margin-top: 20px">
       <el-col :span="12">
         <el-card>
@@ -107,7 +104,6 @@
       </el-col>
     </el-row>
 
-    <!-- 运动记录表格 -->
     <el-card style="margin-top: 20px">
       <template #header>
         <span>最近30天运动记录</span>
@@ -120,9 +116,9 @@
         <el-table-column prop="averageHeartRate" label="平均心率" width="100" />
         <el-table-column prop="equipmentUsed" label="器材" />
       </el-table>
+      <el-empty v-if="exerciseRecords.length === 0" description="暂无运动记录" />
     </el-card>
 
-    <!-- 当前训练计划 -->
     <el-card style="margin-top: 20px">
       <template #header>
         <div style="display: flex; justify-content: space-between; align-items: center">
@@ -133,7 +129,7 @@
       <div v-if="currentPlan">
         <el-descriptions :column="2" border>
           <el-descriptions-item label="计划名称">{{ currentPlan.planName }}</el-descriptions-item>
-          <el-descriptions-item label="完成率">{{ currentPlan.completionRate }}%</el-descriptions-item>
+          <el-descriptions-item label="完成率">{{ Math.round(Number(currentPlan.completionRate || 0)) }}%</el-descriptions-item>
           <el-descriptions-item label="开始日期">{{ currentPlan.startDate }}</el-descriptions-item>
           <el-descriptions-item label="结束日期">{{ currentPlan.endDate }}</el-descriptions-item>
         </el-descriptions>
@@ -144,117 +140,216 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
+import { getCoachStudents } from '@/api/user'
+import { getCoachStudentBodyMetrics, getCoachStudentExerciseRecords } from '@/api/analytics'
+import { getStudentTrainingPlan } from '@/api/trainingPlan'
+import { CHART_COLORS, initChart } from '@/utils/chartTheme'
 
 const router = useRouter()
 const route = useRoute()
-const studentId = route.params.id
+const studentId = Number(route.params.id)
 
 const weightChartRef = ref(null)
 const bodyFatChartRef = ref(null)
 const exerciseTypeChartRef = ref(null)
 
 const studentInfo = reactive({
-  realName: '张三',
-  age: 25,
-  gender: '男',
-  heightCm: 175,
-  fitnessGoal: '减脂',
-  initialWeight: 80.0,
-  currentWeight: 75.5
+  realName: '-',
+  age: '-',
+  gender: '-',
+  heightCm: '-',
+  fitnessGoal: '-',
+  initialWeight: '-',
+  currentWeight: '-'
 })
 
 const metrics = reactive({
-  weight: 75.5,
-  bodyFat: 18.5,
-  bmi: 24.7,
-  muscleMass: 32.5
+  weight: '-',
+  bodyFat: '-',
+  bmi: '-',
+  muscleMass: '-'
 })
 
 const exerciseStats = reactive({
-  totalDuration: 1250,
-  totalCalories: 8500,
-  avgHeartRate: 135,
-  totalCount: 28
+  totalDuration: 0,
+  totalCalories: 0,
+  avgHeartRate: 0,
+  totalCount: 0
 })
 
 const exerciseRecords = ref([])
 const currentPlan = ref(null)
+const bodyMetrics = ref([])
 
 const weightChange = computed(() => {
-  return (studentInfo.currentWeight - studentInfo.initialWeight).toFixed(1)
+  const start = Number(studentInfo.initialWeight)
+  const current = Number(studentInfo.currentWeight)
+  if (!Number.isFinite(start) || !Number.isFinite(current)) {
+    return '0.0'
+  }
+  return (current - start).toFixed(1)
 })
 
-onMounted(() => {
-  loadStudentData()
+onMounted(async () => {
+  await loadStudentData()
   initCharts()
 })
 
 const loadStudentData = async () => {
   try {
-    // TODO: 调用API获取学员数据
-    exerciseRecords.value = [
-      { exerciseDate: '2024-01-19', exerciseType: '跑步', durationMinutes: 45, caloriesBurned: 450, averageHeartRate: 135, equipmentUsed: '跑步机' },
-      { exerciseDate: '2024-01-18', exerciseType: '动感单车', durationMinutes: 30, caloriesBurned: 320, averageHeartRate: 142, equipmentUsed: '动感单车' },
-      { exerciseDate: '2024-01-17', exerciseType: '力量训练', durationMinutes: 60, caloriesBurned: 280, averageHeartRate: 125, equipmentUsed: '哑铃' }
-    ]
+    const [students, metricsData, recordsData] = await Promise.all([
+      getCoachStudents(),
+      getCoachStudentBodyMetrics({ studentId }),
+      getCoachStudentExerciseRecords({ studentId })
+    ])
 
-    currentPlan.value = {
-      planName: '减脂计划',
-      completionRate: 65,
-      startDate: '2024-01-01',
-      endDate: '2024-03-31'
+    const student = (students || []).find((item) => Number(item.id) === studentId)
+    if (!student) {
+      ElMessage.warning('未找到该学员或无访问权限')
+      return
+    }
+
+    studentInfo.realName = student.realName || student.username || '-'
+    studentInfo.age = student.age || '-'
+    studentInfo.gender = normalizeGender(student.gender)
+    studentInfo.fitnessGoal = normalizeGoal(student.fitnessGoal)
+
+    bodyMetrics.value = (metricsData || []).map((item) => ({
+      measurementDate: item.measurementDate,
+      weightKg: Number(item.weightKg || 0),
+      bodyFatPercentage: Number(item.bodyFatPercentage || 0),
+      heightCm: Number(item.heightCm || 0),
+      bmi: Number(item.bmi || 0),
+      muscleMassKg: Number(item.muscleMassKg || 0)
+    }))
+
+    if (bodyMetrics.value.length > 0) {
+      const firstMetric = bodyMetrics.value[0]
+      const lastMetric = bodyMetrics.value[bodyMetrics.value.length - 1]
+
+      studentInfo.initialWeight = firstMetric.weightKg.toFixed(1)
+      studentInfo.currentWeight = lastMetric.weightKg.toFixed(1)
+      studentInfo.heightCm = (lastMetric.heightCm || firstMetric.heightCm || 0).toFixed(1)
+
+      metrics.weight = lastMetric.weightKg.toFixed(1)
+      metrics.bodyFat = lastMetric.bodyFatPercentage.toFixed(1)
+      metrics.bmi = lastMetric.bmi.toFixed(2)
+      metrics.muscleMass = lastMetric.muscleMassKg.toFixed(1)
+    }
+
+    exerciseRecords.value = (recordsData || []).slice(0, 100).map((item) => ({
+      exerciseDate: item.exerciseDate,
+      exerciseType: item.exerciseType,
+      durationMinutes: item.durationMinutes,
+      caloriesBurned: Math.round(Number(item.caloriesBurned || 0)),
+      averageHeartRate: item.averageHeartRate || 0,
+      equipmentUsed: item.equipmentUsed || '-'
+    }))
+
+    exerciseStats.totalCount = exerciseRecords.value.length
+    exerciseStats.totalDuration = exerciseRecords.value.reduce((sum, item) => sum + Number(item.durationMinutes || 0), 0)
+    exerciseStats.totalCalories = exerciseRecords.value.reduce((sum, item) => sum + Number(item.caloriesBurned || 0), 0)
+    exerciseStats.avgHeartRate = exerciseRecords.value.length
+      ? Math.round(exerciseRecords.value.reduce((sum, item) => sum + Number(item.averageHeartRate || 0), 0) / exerciseRecords.value.length)
+      : 0
+
+    try {
+      currentPlan.value = await getStudentTrainingPlan(studentId)
+    } catch (error) {
+      currentPlan.value = null
     }
   } catch (error) {
     ElMessage.error('加载学员数据失败')
   }
 }
 
+const normalizeGender = (gender) => {
+  const value = `${gender || ''}`.toUpperCase()
+  if (value === 'FEMALE' || gender === '女') {
+    return '女'
+  }
+  if (value === 'MALE' || gender === '男') {
+    return '男'
+  }
+  return '-'
+}
+
+const normalizeGoal = (goal) => {
+  const value = `${goal || ''}`.toUpperCase()
+  const mapping = {
+    WEIGHT_LOSS: '减重',
+    FAT_LOSS: '减脂',
+    MUSCLE_GAIN: '增肌'
+  }
+  return mapping[value] || goal || '-'
+}
+
 const initCharts = () => {
-  // 体重变化趋势图
-  const weightChart = echarts.init(weightChartRef.value)
-  weightChart.setOption({
+  initWeightChart()
+  initBodyFatChart()
+  initExerciseTypeChart()
+}
+
+const initWeightChart = () => {
+  if (!weightChartRef.value) return
+  const chart = initChart(weightChartRef.value)
+
+  chart.setOption({
     tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: ['1月', '2月', '3月', '4月', '5月', '6月'] },
+    xAxis: {
+      type: 'category',
+      data: bodyMetrics.value.map((item) => item.measurementDate)
+    },
     yAxis: { type: 'value', name: '体重(kg)' },
     series: [{
-      data: [80, 78.5, 77, 76.5, 76, 75.5],
+      data: bodyMetrics.value.map((item) => item.weightKg),
       type: 'line',
       smooth: true,
-      itemStyle: { color: '#409eff' }
+      itemStyle: { color: CHART_COLORS[0] }
     }]
   })
+}
 
-  // 体脂率变化趋势图
-  const bodyFatChart = echarts.init(bodyFatChartRef.value)
-  bodyFatChart.setOption({
+const initBodyFatChart = () => {
+  if (!bodyFatChartRef.value) return
+  const chart = initChart(bodyFatChartRef.value)
+
+  chart.setOption({
     tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: ['1月', '2月', '3月', '4月', '5月', '6月'] },
+    xAxis: {
+      type: 'category',
+      data: bodyMetrics.value.map((item) => item.measurementDate)
+    },
     yAxis: { type: 'value', name: '体脂率(%)' },
     series: [{
-      data: [25, 23, 21.5, 20, 19, 18.5],
+      data: bodyMetrics.value.map((item) => item.bodyFatPercentage),
       type: 'line',
       smooth: true,
-      itemStyle: { color: '#67c23a' }
+      itemStyle: { color: CHART_COLORS[1] }
     }]
   })
+}
 
-  // 运动类型分布图
-  const exerciseTypeChart = echarts.init(exerciseTypeChartRef.value)
-  exerciseTypeChart.setOption({
+const initExerciseTypeChart = () => {
+  if (!exerciseTypeChartRef.value) return
+  const chart = initChart(exerciseTypeChartRef.value)
+
+  const typeCountMap = exerciseRecords.value.reduce((map, item) => {
+    const key = item.exerciseType || '未分类'
+    map[key] = (map[key] || 0) + 1
+    return map
+  }, {})
+
+  chart.setOption({
     tooltip: { trigger: 'item' },
     series: [{
       type: 'pie',
       radius: '60%',
-      data: [
-        { value: 12, name: '跑步' },
-        { value: 8, name: '动感单车' },
-        { value: 5, name: '力量训练' },
-        { value: 3, name: '游泳' }
-      ]
+      data: Object.entries(typeCountMap).map(([name, value]) => ({ name, value }))
     }]
   })
 }
@@ -264,7 +359,7 @@ const goBack = () => {
 }
 
 const createPlan = () => {
-  router.push('/coach/plans?studentId=' + studentId)
+  router.push(`/coach/plans?studentId=${studentId}`)
 }
 </script>
 

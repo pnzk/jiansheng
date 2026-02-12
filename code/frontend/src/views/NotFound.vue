@@ -64,7 +64,7 @@ const goBack = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #f5f7fa 0%, #e4e7ed 100%);
+  background: linear-gradient(135deg, #eef4ff 0%, #f4f0ff 100%);
   padding: 20px;
 }
 
@@ -76,7 +76,7 @@ const goBack = () => {
 .error-code {
   font-size: 120px;
   font-weight: bold;
-  background: linear-gradient(135deg, #409eff, #67c23a);
+  background: linear-gradient(135deg, #4a90ff, #6f63ff);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;

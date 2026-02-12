@@ -2,65 +2,66 @@
 chcp 65001 >nul
 setlocal
 
+set "NO_PAUSE=0"
+if /I "%~1"=="--no-pause" set "NO_PAUSE=1"
+
 echo ========================================
-echo    健身管理系统 - 安装项目依赖
+echo    Gym Fitness - Install Dependencies
 echo ========================================
 echo.
 
-:: 获取脚本所在目录
 cd /d "%~dp0"
 set "PROJECT_ROOT=%cd%"
 
-echo 项目根目录: %PROJECT_ROOT%
+echo Project root: %PROJECT_ROOT%
 echo.
 
-:: 安装后端依赖
-echo [1/2] 安装后端 Maven 依赖...
+echo [1/2] Installing backend Maven dependencies...
 echo.
 cd /d "%PROJECT_ROOT%\backend"
 if not exist "pom.xml" (
-    echo ✗ 未找到 backend\pom.xml，请确保项目结构完整
-    pause
+    echo [X] backend\pom.xml not found.
+    if "%NO_PAUSE%"=="0" pause
     exit /b 1
 )
 
 call mvn clean install -DskipTests -q
 if errorlevel 1 (
-    echo ✗ 后端依赖安装失败
-    echo   请检查 Maven 配置和网络连接
-    pause
+    echo [X] Backend dependency install failed.
+    echo   Check Maven config and network.
+    if "%NO_PAUSE%"=="0" pause
     exit /b 1
 )
-echo ✓ 后端依赖安装完成
+echo [OK] Backend dependencies installed.
 echo.
 
-:: 安装前端依赖
-echo [2/2] 安装前端 npm 依赖...
+echo [2/2] Installing frontend npm dependencies...
 echo.
 cd /d "%PROJECT_ROOT%\frontend"
 if not exist "package.json" (
-    echo ✗ 未找到 frontend\package.json，请确保项目结构完整
-    pause
+    echo [X] frontend\package.json not found.
+    if "%NO_PAUSE%"=="0" pause
     exit /b 1
 )
 
 call npm install
 if errorlevel 1 (
-    echo ✗ 前端依赖安装失败
-    echo   请检查 npm 配置和网络连接
-    echo   可尝试使用淘宝镜像: npm config set registry https://registry.npmmirror.com
-    pause
+    echo [X] Frontend dependency install failed.
+    echo   Check npm config and network.
+    echo   Try mirror: npm config set registry https://registry.npmmirror.com
+    if "%NO_PAUSE%"=="0" pause
     exit /b 1
 )
-echo ✓ 前端依赖安装完成
+echo [OK] Frontend dependencies installed.
 echo.
 
 echo ========================================
-echo ✓ 所有依赖安装完成！
+echo [OK] Dependency install completed.
 echo.
-echo 下一步：
-echo   1. 运行 init-database.bat 初始化数据库
-echo   2. 运行 start.bat 启动项目
+echo Next:
+echo   1. run start-all.bat ^(recommended^)
+echo   2. or run migrate-and-start.bat
 echo ========================================
 echo.
-pause
+if "%NO_PAUSE%"=="0" pause
+exit /b 0

@@ -2,7 +2,6 @@
   <div class="coaches-page">
     <h2>教练管理</h2>
 
-    <!-- 搜索和操作区 -->
     <el-card style="margin-top: 20px">
       <el-form :inline="true">
         <el-form-item>
@@ -24,38 +23,23 @@
       </el-form>
     </el-card>
 
-    <!-- 教练列表 -->
     <el-card style="margin-top: 20px">
       <el-table :data="coachList" border style="width: 100%" v-loading="loading">
         <el-table-column prop="userId" label="ID" width="80" />
         <el-table-column prop="realName" label="姓名" width="120" />
         <el-table-column prop="username" label="用户名" width="150" />
-        <el-table-column prop="email" label="邮箱" width="200" />
+        <el-table-column prop="email" label="邮箱" width="220" />
         <el-table-column prop="phone" label="电话" width="150" />
-        <el-table-column prop="studentCount" label="负责学员数" width="120" align="center" />
-        <el-table-column prop="status" label="状态" width="100" align="center">
-          <template #default="{ row }">
-            <el-tag :type="row.status === 'active' ? 'success' : 'danger'">
-              {{ row.status === 'active' ? '启用' : '禁用' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="250" fixed="right">
+        <el-table-column prop="studentCount" label="学员数" width="120" align="center" />
+        <el-table-column prop="genderLabel" label="性别" width="80" align="center" />
+        <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button
-              size="small"
-              :type="row.status === 'active' ? 'warning' : 'success'"
-              @click="handleToggleStatus(row)"
-            >
-              {{ row.status === 'active' ? '禁用' : '启用' }}
-            </el-button>
             <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
 
-      <!-- 分页 -->
       <el-pagination
         v-model:current-page="currentPage"
         v-model:page-size="pageSize"
@@ -68,7 +52,6 @@
       />
     </el-card>
 
-    <!-- 添加/编辑对话框 -->
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
@@ -82,8 +65,13 @@
         <el-form-item label="用户名" prop="username">
           <el-input v-model="formData.username" placeholder="请输入用户名" :disabled="isEdit" />
         </el-form-item>
-        <el-form-item label="密码" prop="password" v-if="!isEdit">
-          <el-input v-model="formData.password" type="password" placeholder="请输入密码" />
+        <el-form-item label="密码" prop="password" :required="!isEdit">
+          <el-input
+            v-model="formData.password"
+            type="password"
+            :placeholder="isEdit ? '不修改请留空' : '请输入密码'"
+            show-password
+          />
         </el-form-item>
         <el-form-item label="邮箱" prop="email">
           <el-input v-model="formData.email" placeholder="请输入邮箱" />
@@ -91,10 +79,13 @@
         <el-form-item label="电话" prop="phone">
           <el-input v-model="formData.phone" placeholder="请输入电话" />
         </el-form-item>
+        <el-form-item label="年龄" prop="age">
+          <el-input-number v-model="formData.age" :min="18" :max="100" style="width: 100%" />
+        </el-form-item>
         <el-form-item label="性别" prop="gender">
           <el-radio-group v-model="formData.gender">
-            <el-radio label="male">男</el-radio>
-            <el-radio label="female">女</el-radio>
+            <el-radio label="MALE">男</el-radio>
+            <el-radio label="FEMALE">女</el-radio>
           </el-radio-group>
         </el-form-item>
       </el-form>
@@ -109,10 +100,17 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  getAdminCoaches,
+  createAdminCoach,
+  updateAdminCoach,
+  deleteAdminCoach
+} from '@/api/admin'
 
 const searchKeyword = ref('')
 const loading = ref(false)
 const coachList = ref([])
+const allCoachList = ref([])
 const currentPage = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
@@ -130,19 +128,29 @@ const formData = reactive({
   password: '',
   email: '',
   phone: '',
-  gender: 'male'
+  age: 28,
+  gender: 'MALE'
 })
+
+const validatePassword = (rule, value, callback) => {
+  if (!isEdit.value && (!value || value.length < 6)) {
+    callback(new Error('新增教练时密码至少6位'))
+    return
+  }
+  if (value && value.length < 6) {
+    callback(new Error('密码至少6位'))
+    return
+  }
+  callback()
+}
 
 const formRules = {
   realName: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
   username: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
-    { min: 3, max: 20, message: '用户名长度在3-20个字符', trigger: 'blur' }
+    { min: 3, max: 20, message: '用户名长度在3-20之间', trigger: 'blur' }
   ],
-  password: [
-    { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, message: '密码至少6个字符', trigger: 'blur' }
-  ],
+  password: [{ validator: validatePassword, trigger: 'blur' }],
   email: [
     { required: true, message: '请输入邮箱', trigger: 'blur' },
     { type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' }
@@ -150,47 +158,41 @@ const formRules = {
   phone: [
     { required: true, message: '请输入电话', trigger: 'blur' },
     { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号', trigger: 'blur' }
-  ]
+  ],
+  age: [{ required: true, message: '请输入年龄', trigger: 'blur' }],
+  gender: [{ required: true, message: '请选择性别', trigger: 'change' }]
 }
 
 onMounted(() => {
   loadCoachList()
 })
 
+const toGenderLabel = (gender) => {
+  const value = `${gender || ''}`.toUpperCase()
+  if (value === 'FEMALE') {
+    return '女'
+  }
+  return '男'
+}
+
+const normalizeCoach = (item) => ({
+  userId: item.id,
+  realName: item.realName || item.username,
+  username: item.username,
+  email: item.email || '-',
+  phone: item.phone || '-',
+  age: item.age || null,
+  studentCount: item.studentCount ?? 0,
+  gender: `${item.gender || 'MALE'}`.toUpperCase(),
+  genderLabel: toGenderLabel(item.gender)
+})
+
 const loadCoachList = async () => {
   loading.value = true
   try {
-    // 模拟数据
-    coachList.value = [
-      {
-        userId: 501,
-        realName: '王教练',
-        username: 'coach001',
-        email: 'coach001@gym.com',
-        phone: '13800138001',
-        studentCount: 25,
-        status: 'active'
-      },
-      {
-        userId: 502,
-        realName: '李教练',
-        username: 'coach002',
-        email: 'coach002@gym.com',
-        phone: '13800138002',
-        studentCount: 30,
-        status: 'active'
-      },
-      {
-        userId: 503,
-        realName: '张教练',
-        username: 'coach003',
-        email: 'coach003@gym.com',
-        phone: '13800138003',
-        studentCount: 20,
-        status: 'active'
-      }
-    ]
-    total.value = coachList.value.length
+    const data = await getAdminCoaches()
+    allCoachList.value = (data || []).map(normalizeCoach)
+    applyFilters()
   } catch (error) {
     ElMessage.error('加载教练列表失败')
   } finally {
@@ -198,8 +200,29 @@ const loadCoachList = async () => {
   }
 }
 
+const applyFilters = () => {
+  const keyword = (searchKeyword.value || '').trim().toLowerCase()
+  let filtered = [...allCoachList.value]
+
+  if (keyword) {
+    filtered = filtered.filter((item) =>
+      (item.realName || '').toLowerCase().includes(keyword) ||
+      (item.username || '').toLowerCase().includes(keyword) ||
+      (item.email || '').toLowerCase().includes(keyword) ||
+      (item.phone || '').toLowerCase().includes(keyword) ||
+      `${item.userId}`.includes(keyword)
+    )
+  }
+
+  total.value = filtered.length
+  const start = (currentPage.value - 1) * pageSize.value
+  const end = start + pageSize.value
+  coachList.value = filtered.slice(start, end)
+}
+
 const handleSearch = () => {
-  loadCoachList()
+  currentPage.value = 1
+  applyFilters()
 }
 
 const handleAdd = () => {
@@ -216,40 +239,40 @@ const handleEdit = (row) => {
     userId: row.userId,
     realName: row.realName,
     username: row.username,
-    email: row.email,
-    phone: row.phone,
-    gender: row.gender || 'male'
+    password: '',
+    email: row.email === '-' ? '' : row.email,
+    phone: row.phone === '-' ? '' : row.phone,
+    age: row.age || 28,
+    gender: row.gender || 'MALE'
   })
   dialogVisible.value = true
 }
 
-const handleToggleStatus = async (row) => {
-  const action = row.status === 'active' ? '禁用' : '启用'
-  try {
-    await ElMessageBox.confirm(`确定要${action}该教练吗？`, '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
-    row.status = row.status === 'active' ? 'inactive' : 'active'
-    ElMessage.success(`${action}成功`)
-  } catch {
-    // 取消操作
-  }
-}
+const buildPayload = () => ({
+  username: formData.username,
+  password: formData.password || null,
+  realName: formData.realName,
+  email: formData.email,
+  phone: formData.phone,
+  age: formData.age,
+  gender: formData.gender
+})
 
 const handleDelete = async (row) => {
   try {
-    await ElMessageBox.confirm('确定要删除该教练吗？此操作不可恢复！', '警告', {
+    await ElMessageBox.confirm('确定要删除该教练吗？此操作不可恢复。', '警告', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'error'
     })
-    coachList.value = coachList.value.filter(c => c.userId !== row.userId)
-    total.value--
+
+    await deleteAdminCoach(row.userId)
     ElMessage.success('删除成功')
-  } catch {
-    // 取消操作
+    await loadCoachList()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除失败')
+    }
   }
 }
 
@@ -257,31 +280,21 @@ const handleSubmit = async () => {
   try {
     await formRef.value.validate()
     submitting.value = true
-    
-    // 模拟提交
-    await new Promise(resolve => setTimeout(resolve, 500))
-    
+
+    const payload = buildPayload()
     if (isEdit.value) {
-      const index = coachList.value.findIndex(c => c.userId === formData.userId)
-      if (index !== -1) {
-        coachList.value[index] = { ...coachList.value[index], ...formData }
-      }
+      await updateAdminCoach(formData.userId, payload)
       ElMessage.success('更新成功')
     } else {
-      coachList.value.push({
-        ...formData,
-        userId: Date.now(),
-        studentCount: 0,
-        status: 'active'
-      })
-      total.value++
+      await createAdminCoach(payload)
       ElMessage.success('添加成功')
     }
-    
+
     dialogVisible.value = false
+    await loadCoachList()
   } catch (error) {
-    if (error !== false) {
-      ElMessage.error('操作失败')
+    if (error !== false && error !== 'cancel') {
+      ElMessage.error(error?.message || '操作失败')
     }
   } finally {
     submitting.value = false
@@ -300,17 +313,18 @@ const resetForm = () => {
     password: '',
     email: '',
     phone: '',
-    gender: 'male'
+    age: 28,
+    gender: 'MALE'
   })
   formRef.value?.clearValidate()
 }
 
 const handleSizeChange = () => {
-  loadCoachList()
+  applyFilters()
 }
 
 const handleCurrentChange = () => {
-  loadCoachList()
+  applyFilters()
 }
 </script>
 
@@ -319,3 +333,4 @@ const handleCurrentChange = () => {
   margin-bottom: 20px;
 }
 </style>
+

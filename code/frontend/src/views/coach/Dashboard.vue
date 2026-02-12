@@ -78,8 +78,8 @@
           </template>
           <div class="todo-list">
             <div 
-              v-for="(item, index) in todoList" 
-              :key="index" 
+              v-for="item in todoList" 
+              :key="item.id" 
               class="todo-item"
               :class="item.priority"
             >
@@ -92,7 +92,15 @@
                 <div class="todo-title">{{ item.title }}</div>
                 <div class="todo-desc">{{ item.description }}</div>
               </div>
-              <el-button size="small" type="primary" text @click="handleTodo(item)">处理</el-button>
+              <el-button
+                size="small"
+                type="primary"
+                text
+                :disabled="processingTodoIds.has(item.id)"
+                @click="handleTodo(item)"
+              >
+                {{ processingTodoIds.has(item.id) ? '处理中...' : '处理' }}
+              </el-button>
             </div>
             <el-empty v-if="!todoList.length" description="暂无待办事项" :image-size="60" />
           </div>
@@ -163,7 +171,9 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
-import { getDashboardStatistics, getUserBehaviorAnalysis } from '@/api/analytics'
+import { getCoachDashboard } from '@/api/analytics'
+import { getCoachStudents, handleCoachTodo } from '@/api/user'
+import { CHART_COLORS, initChart } from '@/utils/chartTheme'
 
 const router = useRouter()
 const weightChartRef = ref(null)
@@ -171,24 +181,82 @@ const exerciseChartRef = ref(null)
 const goalChartRef = ref(null)
 
 const stats = reactive({
-  totalStudents: 25,
-  maleStudents: 15,
-  femaleStudents: 10,
-  avgAge: 28
+  totalStudents: 0,
+  maleStudents: 0,
+  femaleStudents: 0,
+  avgAge: 0,
+  activeStudents: 0
 })
 
-const todoList = ref([
-  { title: '张三训练计划到期', description: '计划将于3天后到期，需要续期或制定新计划', priority: 'high' },
-  { title: '李四体重异常', description: '本周体重增加2kg，需要关注', priority: 'medium' },
-  { title: '王五7天未运动', description: '建议联系了解情况', priority: 'high' },
-  { title: '新学员赵六入会', description: '需要制定初始训练计划', priority: 'low' }
-])
+const dashboardData = ref(null)
+
+const todoList = ref([])
 
 const activeStudentsList = ref([])
 const attentionStudentsList = ref([])
+const processingTodoIds = ref(new Set())
+const inactiveThresholdDays = 7
 
-const handleTodo = (item) => {
-  ElMessage.info(`处理: ${item.title}`)
+const normalizePlanStatus = (status) => {
+  const raw = `${status || ''}`.trim().toLowerCase()
+  if (raw.includes('active') || raw.includes('进行') || raw === 'in_progress') {
+    return 'active'
+  }
+  if (raw.includes('complete') || raw.includes('完成')) {
+    return 'completed'
+  }
+  return 'inactive'
+}
+
+const toDateValue = (value) => {
+  if (!value) {
+    return null
+  }
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+const formatDateTime = (value) => {
+  const date = toDateValue(value)
+  if (!date) {
+    return '-'
+  }
+  return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, '0')}-${`${date.getDate()}`.padStart(2, '0')} ${`${date.getHours()}`.padStart(2, '0')}:${`${date.getMinutes()}`.padStart(2, '0')}`
+}
+
+const getInactiveDays = (value) => {
+  const date = toDateValue(value)
+  if (!date) {
+    return null
+  }
+  const diff = Date.now() - date.getTime()
+  return Math.max(0, Math.floor(diff / (24 * 60 * 60 * 1000)))
+}
+
+const handleTodo = async (item) => {
+  if (processingTodoIds.value.has(item.id)) {
+    return
+  }
+
+  processingTodoIds.value.add(item.id)
+
+  try {
+    await handleCoachTodo({
+      studentId: item.userId,
+      todoKey: item.todoKey,
+      todoTitle: item.title,
+      todoDescription: item.description
+    })
+
+    todoList.value = todoList.value.filter((todo) => todo.id !== item.id)
+    ElMessage.success(`已处理: ${item.title}`)
+
+    if (item.route) {
+      await router.push(item.route)
+    }
+  } finally {
+    processingTodoIds.value.delete(item.id)
+  }
 }
 
 onMounted(async () => {
@@ -200,25 +268,97 @@ onMounted(async () => {
 
 const loadData = async () => {
   try {
-    // 获取统计数据
-    const dashboardData = await getDashboardStatistics()
-    stats.totalStudents = dashboardData.totalUsers || 0
-    stats.activeStudents = dashboardData.activeUsers || 0
-    stats.weekDuration = dashboardData.totalDuration || 0
-    stats.weekCalories = dashboardData.totalCalories || 0
+    const [coachDashboard, coachStudents] = await Promise.all([
+      getCoachDashboard(),
+      getCoachStudents()
+    ])
 
-    // 模拟最近活跃学员数据
-    activeStudentsList.value = [
-      { userId: 1, realName: '张三', lastExerciseDate: '2024-01-19 10:30' },
-      { userId: 2, realName: '李四', lastExerciseDate: '2024-01-19 09:15' },
-      { userId: 3, realName: '王五', lastExerciseDate: '2024-01-18 18:45' }
-    ]
+    dashboardData.value = coachDashboard || {}
+    stats.totalStudents = Number(coachDashboard?.totalStudents || 0)
+    stats.activeStudents = Number(coachDashboard?.activeStudents || 0)
+    const students = Array.isArray(coachStudents) ? coachStudents : []
 
-    // 模拟需要关注的学员
-    attentionStudentsList.value = [
-      { userId: 4, realName: '赵六', reason: '7天未运动' },
-      { userId: 5, realName: '孙七', reason: '体重异常增加' }
-    ]
+    const maleFromApi = Number(coachDashboard?.maleStudents || 0)
+    stats.maleStudents = maleFromApi > 0 ? maleFromApi : students.filter((item) => {
+      const gender = `${item.gender || ''}`.toUpperCase()
+      return gender === 'MALE'
+    }).length
+    const femaleFromApi = Number(coachDashboard?.femaleStudents || 0)
+    stats.femaleStudents = femaleFromApi > 0 ? femaleFromApi : students.filter((item) => {
+      const gender = `${item.gender || ''}`.toUpperCase()
+      return gender === 'FEMALE'
+    }).length
+
+    const avgAgeFromApi = Number(coachDashboard?.avgAge || 0)
+    if (Number.isFinite(avgAgeFromApi) && avgAgeFromApi > 0) {
+      stats.avgAge = Math.round(avgAgeFromApi)
+    } else {
+      const ageValues = students
+        .map((item) => Number(item.age))
+        .filter((value) => Number.isFinite(value) && value > 0)
+      stats.avgAge = ageValues.length
+        ? Math.round(ageValues.reduce((sum, value) => sum + value, 0) / ageValues.length)
+        : 0
+    }
+
+    activeStudentsList.value = students
+      .filter((item) => item.lastExerciseTime)
+      .sort((left, right) => {
+        const leftTs = toDateValue(left.lastExerciseTime)?.getTime() || 0
+        const rightTs = toDateValue(right.lastExerciseTime)?.getTime() || 0
+        return rightTs - leftTs
+      })
+      .slice(0, 5)
+      .map((item) => ({
+        userId: item.id,
+        realName: item.realName || item.username,
+        lastExerciseDate: formatDateTime(item.lastExerciseTime)
+      }))
+
+    attentionStudentsList.value = students
+      .map((item) => {
+        const status = normalizePlanStatus(item.trainingStatus)
+        const inactiveDays = getInactiveDays(item.lastExerciseTime)
+
+        if (inactiveDays == null || inactiveDays >= inactiveThresholdDays) {
+          return {
+            userId: item.id,
+            realName: item.realName || item.username,
+            reason: inactiveDays == null ? '暂无运动记录' : `${inactiveDays}天未运动`
+          }
+        }
+
+        if (status === 'inactive') {
+          return {
+            userId: item.id,
+            realName: item.realName || item.username,
+            reason: '暂无进行中训练计划'
+          }
+        }
+
+        const progress = Number(item.planProgress)
+        if (Number.isFinite(progress) && progress > 0 && progress < 30) {
+          return {
+            userId: item.id,
+            realName: item.realName || item.username,
+            reason: `计划完成率偏低（${Math.round(progress)}%）`
+          }
+        }
+
+        return null
+      })
+      .filter(Boolean)
+      .slice(0, 5)
+
+    todoList.value = attentionStudentsList.value.map((item, index) => ({
+      id: `todo-${item.userId}-${index}`,
+      todoKey: item.reason,
+      userId: item.userId,
+      title: `${item.realName}需要跟进`,
+      description: item.reason,
+      priority: item.reason.includes('未运动') || item.reason.includes('暂无运动记录') ? 'high' : 'medium',
+      route: '/coach/students'
+    }))
   } catch (error) {
     ElMessage.error('加载数据失败')
   }
@@ -226,7 +366,25 @@ const loadData = async () => {
 
 const initGoalChart = () => {
   if (!goalChartRef.value) return
-  const chart = echarts.init(goalChartRef.value)
+  const chart = initChart(goalChartRef.value)
+
+  const goalMap = dashboardData.value?.goalDistribution || {}
+  const goalLabels = {
+    WEIGHT_LOSS: '减重',
+    FAT_LOSS: '减脂',
+    MUSCLE_GAIN: '增肌'
+  }
+  const colors = {
+    WEIGHT_LOSS: '#f56c6c',
+    FAT_LOSS: '#e6a23c',
+    MUSCLE_GAIN: '#67c23a'
+  }
+  const data = ['WEIGHT_LOSS', 'FAT_LOSS', 'MUSCLE_GAIN'].map((key) => ({
+    value: Number(goalMap[key] || 0),
+    name: goalLabels[key],
+    itemStyle: { color: colors[key] }
+  }))
+
   chart.setOption({
     tooltip: { trigger: 'item', formatter: '{b}: {c}人 ({d}%)' },
     legend: { orient: 'vertical', left: 'left', top: 'center' },
@@ -238,62 +396,63 @@ const initGoalChart = () => {
       itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
       label: { show: true, formatter: '{b}\n{c}人' },
       emphasis: { label: { show: true, fontSize: 16, fontWeight: 'bold' } },
-      data: [
-        { value: 12, name: '减重', itemStyle: { color: '#f56c6c' } },
-        { value: 8, name: '减脂', itemStyle: { color: '#e6a23c' } },
-        { value: 5, name: '增肌', itemStyle: { color: '#67c23a' } }
-      ]
+      data
     }]
   })
 }
 
 const initWeightChart = () => {
   if (!weightChartRef.value) return
-  const chart = echarts.init(weightChartRef.value)
+  const chart = initChart(weightChartRef.value)
+
+  const trend = Array.isArray(dashboardData.value?.weightTrend)
+    ? dashboardData.value.weightTrend
+    : []
+  const dates = trend.map((item) => item.date)
+  const values = trend.map((item) => Number(item.avgWeight || 0))
+
+  const safeMin = values.length ? Math.max(Math.floor(Math.min(...values) - 3), 30) : 40
+  const safeMax = values.length ? Math.ceil(Math.max(...values) + 3) : 100
+
   chart.setOption({
     tooltip: { trigger: 'axis' },
-    legend: { data: ['平均体重', '目标体重'] },
+    legend: { data: ['平均体重'] },
     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
     xAxis: {
       type: 'category',
-      data: ['1月', '2月', '3月', '4月', '5月', '6月']
+      data: dates
     },
-    yAxis: { type: 'value', name: '体重(kg)', min: 60, max: 80 },
+    yAxis: { type: 'value', name: '体重(kg)', min: safeMin, max: safeMax },
     series: [
       {
         name: '平均体重',
-        data: [72, 71, 70, 69.5, 69, 68.5],
+        data: values,
         type: 'line',
         smooth: true,
-        itemStyle: { color: '#409eff' },
+        itemStyle: { color: CHART_COLORS[0] },
         areaStyle: { opacity: 0.2 }
-      },
-      {
-        name: '目标体重',
-        data: [68, 68, 68, 68, 68, 68],
-        type: 'line',
-        lineStyle: { type: 'dashed' },
-        itemStyle: { color: '#67c23a' }
       }
     ]
   })
 }
 
 const initExerciseChart = () => {
-  const chart = echarts.init(exerciseChartRef.value)
+  if (!exerciseChartRef.value) return
+  const chart = initChart(exerciseChartRef.value)
+
+  const distribution = dashboardData.value?.exerciseTypeDistribution || {}
+  const data = Object.entries(distribution).map(([name, value]) => ({
+    name,
+    value: Number(value || 0)
+  }))
+
   chart.setOption({
     tooltip: { trigger: 'item' },
     legend: { orient: 'vertical', left: 'left' },
     series: [{
       type: 'pie',
       radius: '60%',
-      data: [
-        { value: 35, name: '跑步' },
-        { value: 25, name: '动感单车' },
-        { value: 20, name: '力量训练' },
-        { value: 15, name: '游泳' },
-        { value: 5, name: '其他' }
-      ],
+      data,
       emphasis: {
         itemStyle: {
           shadowBlur: 10,

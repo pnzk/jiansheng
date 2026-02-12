@@ -1,5 +1,5 @@
 <template>
-  <div class="mobile-dashboard">
+  <div class="mobile-dashboard" v-loading="loading">
     <!-- 顶部状态栏 -->
     <div class="status-bar">
       <span class="time">{{ currentTime }}</span>
@@ -20,7 +20,7 @@
         <div class="coach-title">高级健身教练</div>
       </div>
       <div class="header-actions">
-        <el-badge :value="5" :max="9">
+        <el-badge :value="todoList.length" :max="99">
           <el-icon size="24"><Bell /></el-icon>
         </el-badge>
       </div>
@@ -51,7 +51,13 @@
         <el-badge :value="todoList.length" type="danger" />
       </div>
       <div class="todo-list">
-        <div class="todo-item" v-for="(item, index) in todoList" :key="index" :class="item.priority">
+        <div
+          class="todo-item"
+          v-for="item in todoList"
+          :key="item.id"
+          :class="item.priority"
+          @click="handleTodoClick(item)"
+        >
           <div class="todo-priority"></div>
           <div class="todo-content">
             <div class="todo-title">{{ item.title }}</div>
@@ -59,6 +65,7 @@
           </div>
           <el-icon class="todo-action"><ArrowRight /></el-icon>
         </div>
+        <el-empty v-if="!todoList.length" description="暂无待办事项" :image-size="50" />
       </div>
     </div>
 
@@ -68,27 +75,18 @@
         <span class="section-title">🎯 学员目标分布</span>
       </div>
       <div class="goal-distribution">
-        <div class="goal-item">
-          <div class="goal-bar" style="--color: #f56c6c; --width: 48%"></div>
+        <div
+          class="goal-item"
+          v-for="item in goalDistribution"
+          :key="item.name"
+        >
+          <div class="goal-bar" :style="{ '--color': item.color, '--width': item.width }"></div>
           <div class="goal-info">
-            <span class="goal-name">减重</span>
-            <span class="goal-count">12人</span>
+            <span class="goal-name">{{ item.name }}</span>
+            <span class="goal-count">{{ item.count }}人</span>
           </div>
         </div>
-        <div class="goal-item">
-          <div class="goal-bar" style="--color: #e6a23c; --width: 32%"></div>
-          <div class="goal-info">
-            <span class="goal-name">减脂</span>
-            <span class="goal-count">8人</span>
-          </div>
-        </div>
-        <div class="goal-item">
-          <div class="goal-bar" style="--color: #67c23a; --width: 20%"></div>
-          <div class="goal-info">
-            <span class="goal-name">增肌</span>
-            <span class="goal-count">5人</span>
-          </div>
-        </div>
+        <el-empty v-if="!goalDistribution.length" description="暂无学员目标数据" :image-size="50" />
       </div>
     </div>
 
@@ -96,19 +94,20 @@
     <div class="section">
       <div class="section-header">
         <span class="section-title">🏃 最近活跃</span>
-        <span class="section-more">全部 ></span>
+        <span class="section-more" @click="router.push('/coach/students')">全部 ></span>
       </div>
       <div class="student-list">
-        <div class="student-item" v-for="(student, index) in activeStudents" :key="index">
+        <div class="student-item" v-for="student in activeStudents" :key="student.id">
           <el-avatar :size="40">{{ student.name.charAt(0) }}</el-avatar>
           <div class="student-info">
             <div class="student-name">{{ student.name }}</div>
             <div class="student-activity">{{ student.lastActivity }}</div>
           </div>
-          <el-tag size="small" :type="student.status === '运动中' ? 'success' : 'info'">
+          <el-tag size="small" :type="student.tagType">
             {{ student.status }}
           </el-tag>
         </div>
+        <el-empty v-if="!activeStudents.length" description="暂无运动记录" :image-size="50" />
       </div>
     </div>
 
@@ -118,14 +117,15 @@
         <span class="section-title">⚠️ 需要关注</span>
       </div>
       <div class="attention-list">
-        <div class="attention-item" v-for="(student, index) in attentionStudents" :key="index">
+        <div class="attention-item" v-for="student in attentionStudents" :key="student.id">
           <el-avatar :size="36">{{ student.name.charAt(0) }}</el-avatar>
           <div class="attention-info">
             <div class="attention-name">{{ student.name }}</div>
             <div class="attention-reason">{{ student.reason }}</div>
           </div>
-          <el-button size="small" type="primary" round>联系</el-button>
+          <el-button size="small" type="primary" round @click="viewStudent(student.id)">查看</el-button>
         </div>
+        <el-empty v-if="!attentionStudents.length" description="暂无重点关注学员" :image-size="50" />
       </div>
     </div>
 
@@ -179,56 +179,340 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { onMounted, onUnmounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { Bell, HomeFilled, User, Plus, DataAnalysis, Setting, ArrowRight } from '@element-plus/icons-vue'
-import { getDashboardStatistics } from '@/api/analytics'
+import { getCoachStudentReport } from '@/api/analytics'
+import { getCoachStudents, handleCoachTodo } from '@/api/user'
+import { getCoachTrainingPlans } from '@/api/trainingPlan'
 
-const currentTime = ref(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
+const router = useRouter()
+
+const goalMap = {
+  WEIGHT_LOSS: '减重',
+  FAT_LOSS: '减脂',
+  MUSCLE_GAIN: '增肌',
+  BODY_SHAPING: '塑形',
+  HEALTH: '保持'
+}
+
+const goalColors = ['#f56c6c', '#e6a23c', '#67c23a', '#409eff', '#909399']
+
+const loading = ref(false)
+const currentTime = ref(formatClock(new Date()))
 const coachName = ref(localStorage.getItem('realName') || '教练')
 
 const stats = reactive({
-  totalStudents: 25,
-  activeStudents: 18,
-  needAttention: 3,
-  weekDuration: 2850,
-  weekCalories: 45000,
-  plansCreated: 5
+  totalStudents: 0,
+  activeStudents: 0,
+  needAttention: 0,
+  weekDuration: 0,
+  weekCalories: 0,
+  plansCreated: 0
 })
 
-const todoList = ref([
-  { title: '张三训练计划到期', description: '计划将于3天后到期', priority: 'high' },
-  { title: '李四体重异常', description: '本周体重增加2kg', priority: 'medium' },
-  { title: '王五7天未运动', description: '建议联系了解情况', priority: 'high' },
-  { title: '新学员赵六入会', description: '需要制定初始计划', priority: 'low' }
-])
+const goalDistribution = ref([])
+const todoList = ref([])
+const activeStudents = ref([])
+const attentionStudents = ref([])
 
-const activeStudents = ref([
-  { name: '张三', lastActivity: '刚刚完成跑步30分钟', status: '已完成' },
-  { name: '李四', lastActivity: '正在进行力量训练', status: '运动中' },
-  { name: '王五', lastActivity: '2小时前完成游泳', status: '已完成' }
-])
-
-const attentionStudents = ref([
-  { name: '赵六', reason: '连续7天未运动' },
-  { name: '孙七', reason: '体重异常增加3kg' },
-  { name: '周八', reason: '训练计划即将到期' }
-])
+let timerId = null
 
 const loadData = async () => {
+  loading.value = true
   try {
-    const data = await getDashboardStatistics()
-    if (data) {
-      stats.totalStudents = data.totalUsers || 25
-      stats.activeStudents = data.activeUsers || 18
-    }
-  } catch (e) {}
+    const [students, plans] = await Promise.all([
+      getCoachStudents(),
+      getCoachTrainingPlans()
+    ])
+
+    const normalizedStudents = (students || []).map((item) => normalizeStudent(item))
+    const today = new Date()
+    const weekStart = getWeekStart(today)
+
+    stats.totalStudents = normalizedStudents.length
+    stats.activeStudents = normalizedStudents.filter((item) => item.daysSinceLastExercise != null && item.daysSinceLastExercise <= 7).length
+
+    const weeklyReport = await loadWeeklyReport(normalizedStudents, weekStart, today)
+    stats.weekDuration = weeklyReport.reduce((sum, item) => sum + Number(item.totalDuration || 0), 0)
+    stats.weekCalories = Math.round(weeklyReport.reduce((sum, item) => sum + Number(item.totalCalories || 0), 0))
+    stats.plansCreated = countPlansCreatedThisWeek(plans || [], weekStart, today)
+
+    goalDistribution.value = buildGoalDistribution(normalizedStudents)
+    activeStudents.value = buildActiveStudents(normalizedStudents)
+    attentionStudents.value = buildAttentionStudents(normalizedStudents)
+    stats.needAttention = attentionStudents.value.length
+    todoList.value = buildTodoList(attentionStudents.value)
+  } catch (error) {
+    ElMessage.error('加载移动端看板数据失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+const loadWeeklyReport = async (students, startDate, endDate) => {
+  if (!students.length) {
+    return []
+  }
+
+  const data = await getCoachStudentReport({
+    studentIds: students.map((item) => item.id).join(','),
+    startDate: formatDate(startDate),
+    endDate: formatDate(endDate)
+  })
+
+  return Array.isArray(data) ? data : []
+}
+
+const normalizeStudent = (item) => {
+  const lastExerciseDate = parseDate(item.lastExerciseTime)
+  const numericProgress = Number(item.planProgress || 0)
+
+  return {
+    id: item.id,
+    name: item.realName || item.username || `学员${item.id}`,
+    goal: normalizeGoal(item.fitnessGoal),
+    trainingStatus: normalizePlanStatus(item.trainingStatus),
+    progress: Number.isFinite(numericProgress) ? numericProgress : 0,
+    lastExerciseDate,
+    daysSinceLastExercise: getDaysDiff(lastExerciseDate, new Date())
+  }
+}
+
+const normalizeGoal = (goal) => {
+  if (!goal) {
+    return '未设置'
+  }
+  const key = `${goal}`.trim().toUpperCase()
+  return goalMap[key] || `${goal}`
+}
+
+const normalizePlanStatus = (status) => {
+  const raw = `${status || ''}`.trim().toLowerCase()
+  if (raw.includes('active') || raw.includes('进行') || raw === 'in_progress') {
+    return 'active'
+  }
+  if (raw.includes('complete') || raw.includes('完成')) {
+    return 'completed'
+  }
+  return 'inactive'
+}
+
+const buildGoalDistribution = (students) => {
+  if (!students.length) {
+    return []
+  }
+
+  const goalCounter = students.reduce((acc, item) => {
+    const key = item.goal || '未设置'
+    acc[key] = (acc[key] || 0) + 1
+    return acc
+  }, {})
+
+  const total = students.length
+  return Object.entries(goalCounter)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count], index) => ({
+      name,
+      count,
+      color: goalColors[index % goalColors.length],
+      width: `${Math.max(Math.round((count / total) * 100), 10)}%`
+    }))
+}
+
+const buildActiveStudents = (students) => {
+  return students
+    .filter((item) => item.lastExerciseDate)
+    .sort((a, b) => b.lastExerciseDate - a.lastExerciseDate)
+    .slice(0, 5)
+    .map((item) => {
+      const days = item.daysSinceLastExercise
+      let status = '待跟进'
+      let tagType = 'info'
+
+      if (days != null && days <= 1) {
+        status = '活跃'
+        tagType = 'success'
+      } else if (days != null && days <= 3) {
+        status = '近期'
+        tagType = 'warning'
+      }
+
+      return {
+        id: item.id,
+        name: item.name,
+        lastActivity: `最近一次运动：${formatRelativeDay(days)}`,
+        status,
+        tagType
+      }
+    })
+}
+
+const buildAttentionStudents = (students) => {
+  return students
+    .map((item) => {
+      if (item.daysSinceLastExercise == null) {
+        return {
+          id: item.id,
+          name: item.name,
+          reason: '暂无运动记录'
+        }
+      }
+
+      if (item.daysSinceLastExercise > 7) {
+        return {
+          id: item.id,
+          name: item.name,
+          reason: `连续${item.daysSinceLastExercise}天未运动`
+        }
+      }
+
+      if (item.trainingStatus === 'inactive') {
+        return {
+          id: item.id,
+          name: item.name,
+          reason: '暂无进行中训练计划'
+        }
+      }
+
+      if (item.progress > 0 && item.progress < 30) {
+        return {
+          id: item.id,
+          name: item.name,
+          reason: `计划完成率偏低（${Math.round(item.progress)}%）`
+        }
+      }
+
+      return null
+    })
+    .filter(Boolean)
+    .slice(0, 6)
+}
+
+const buildTodoList = (attentionList) => {
+  return attentionList.map((item, index) => ({
+    id: `todo-${item.id}-${index}`,
+    todoKey: item.reason,
+    title: `${item.name}需要跟进`,
+    description: item.reason,
+    priority: getTodoPriority(item.reason),
+    userId: item.id
+  }))
+}
+
+const getTodoPriority = (reason) => {
+  if (reason.includes('未运动') || reason.includes('暂无运动记录')) {
+    return 'high'
+  }
+  if (reason.includes('暂无进行中训练计划')) {
+    return 'medium'
+  }
+  return 'low'
+}
+
+const countPlansCreatedThisWeek = (plans, startDate, endDate) => {
+  return plans.filter((plan) => {
+    const createdAt = parseDate(plan.createdAt)
+    return createdAt && createdAt >= startDate && createdAt <= endDate
+  }).length
+}
+
+const handleTodoClick = async (item) => {
+  try {
+    await handleCoachTodo({
+      studentId: item.userId,
+      todoKey: item.todoKey,
+      todoTitle: item.title,
+      todoDescription: item.description
+    })
+    todoList.value = todoList.value.filter((todo) => todo.id !== item.id)
+    ElMessage.success(`已处理: ${item.title}`)
+  } catch (error) {
+    ElMessage.error(error?.message || '处理待办失败')
+  }
+
+  if (item.userId) {
+    router.push(`/coach/students/${item.userId}`)
+    return
+  }
+  router.push('/coach/students')
+}
+
+const viewStudent = (studentId) => {
+  router.push(`/coach/students/${studentId}`)
+}
+
+const getWeekStart = (date) => {
+  const d = new Date(date)
+  const day = d.getDay()
+  const diff = day === 0 ? 6 : day - 1
+  d.setDate(d.getDate() - diff)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+const getDaysDiff = (date, reference) => {
+  if (!date) {
+    return null
+  }
+  const target = new Date(date)
+  target.setHours(0, 0, 0, 0)
+  const current = new Date(reference)
+  current.setHours(0, 0, 0, 0)
+  return Math.max(Math.round((current - target) / (24 * 60 * 60 * 1000)), 0)
+}
+
+const formatRelativeDay = (days) => {
+  if (days == null) {
+    return '暂无记录'
+  }
+  if (days === 0) {
+    return '今天'
+  }
+  if (days === 1) {
+    return '1天前'
+  }
+  return `${days}天前`
+}
+
+const formatDate = (value) => {
+  const date = new Date(value)
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const formatClock = (date) => {
+  return date.toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+const parseDate = (value) => {
+  if (!value) {
+    return null
+  }
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+  return date
 }
 
 onMounted(() => {
   loadData()
-  setInterval(() => {
-    currentTime.value = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  timerId = setInterval(() => {
+    currentTime.value = formatClock(new Date())
   }, 1000)
+})
+
+onUnmounted(() => {
+  if (timerId) {
+    clearInterval(timerId)
+  }
 })
 </script>
 
@@ -363,6 +647,7 @@ onMounted(() => {
 .section-more {
   font-size: 12px;
   color: #909399;
+  cursor: pointer;
 }
 
 .todo-list {
@@ -377,6 +662,7 @@ onMounted(() => {
   padding: 12px;
   background: #f9f9f9;
   border-radius: 12px;
+  cursor: pointer;
 }
 
 .todo-priority {

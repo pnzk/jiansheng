@@ -36,6 +36,11 @@ const routes = [
         component: () => import('@/views/student/Calendar.vue')
       },
       {
+        path: 'checkin',
+        name: 'ExerciseCheckin',
+        component: () => import('@/views/student/Checkin.vue')
+      },
+      {
         path: 'progress',
         name: 'ProgressTracking',
         component: () => import('@/views/student/Progress.vue')

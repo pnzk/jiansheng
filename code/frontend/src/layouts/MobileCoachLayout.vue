@@ -13,13 +13,13 @@
   min-height: 100vh;
   max-width: 480px;
   margin: 0 auto;
-  background: #f5f5f5;
+  background: #f3f7ff;
   position: relative;
 }
 
 @media (min-width: 481px) {
   .mobile-layout {
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 0 20px rgba(74, 112, 255, 0.16);
   }
 }
 </style>

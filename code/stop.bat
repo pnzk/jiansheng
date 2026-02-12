@@ -1,30 +1,35 @@
 @echo off
 chcp 65001 >nul
+setlocal
+
+set "NO_PAUSE=0"
+if /I "%~1"=="--no-pause" set "NO_PAUSE=1"
 
 echo ========================================
-echo    健身管理系统 - 停止所有服务
+echo    Gym Fitness - Stop Services
 echo ========================================
 echo.
 
-echo 正在停止后端服务 (Java)...
+echo Stopping backend processes (java.exe)...
 taskkill /F /IM java.exe /T >nul 2>&1
 if errorlevel 1 (
-    echo   ⚠ 未发现运行中的 Java 进程
+    echo   [WARN] No running Java process found.
 ) else (
-    echo   ✓ 后端服务已停止
+    echo   [OK] Java processes stopped.
 )
 
-echo 正在停止前端服务 (Node)...
+echo Stopping frontend processes (node.exe)...
 taskkill /F /IM node.exe /T >nul 2>&1
 if errorlevel 1 (
-    echo   ⚠ 未发现运行中的 Node 进程
+    echo   [WARN] No running Node process found.
 ) else (
-    echo   ✓ 前端服务已停止
+    echo   [OK] Node processes stopped.
 )
 
 echo.
 echo ========================================
-echo ✓ 所有服务已停止
+echo [OK] Stop workflow completed.
 echo ========================================
 echo.
-pause
+if "%NO_PAUSE%"=="0" pause
+exit /b 0

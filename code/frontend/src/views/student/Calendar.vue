@@ -9,8 +9,12 @@
         range-separator="至"
         start-placeholder="开始日期"
         end-placeholder="结束日期"
+        value-format="YYYY-MM-DD"
         @change="loadExerciseRecords"
       />
+      <el-button type="primary" @click="loadExerciseRecords" style="margin-left: 10px">
+        查询
+      </el-button>
       <el-button type="primary" @click="showAddDialog = true" style="margin-left: 10px">
         添加运动记录
       </el-button>
@@ -82,6 +86,7 @@ import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 import { getUserExerciseRecords, addExerciseRecord, deleteExerciseRecord } from '@/api/exercise'
+import { initChart } from '@/utils/chartTheme'
 
 const dateRange = ref([])
 const exerciseRecords = ref([])
@@ -104,8 +109,8 @@ const loadExerciseRecords = async () => {
   try {
     const params = {}
     if (dateRange.value && dateRange.value.length === 2) {
-      params.startDate = dateRange.value[0].toISOString().split('T')[0]
-      params.endDate = dateRange.value[1].toISOString().split('T')[0]
+      params.startDate = dateRange.value[0]
+      params.endDate = dateRange.value[1]
     }
     const data = await getUserExerciseRecords(params)
     exerciseRecords.value = data
@@ -138,7 +143,7 @@ const deleteRecord = async (id) => {
 
 const renderChart = () => {
   if (!chart) {
-    chart = echarts.init(chartRef.value)
+    chart = initChart(chartRef.value)
   }
   
   const typeCount = {}

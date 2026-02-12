@@ -1,103 +1,137 @@
 @echo off
 chcp 65001 >nul
-setlocal
+setlocal enabledelayedexpansion
 
 echo ========================================
-echo    健身管理系统 - 一键启动
+echo    Gym Fitness System - One Click Start
 echo ========================================
 echo.
 
-:: 获取脚本所在目录
 cd /d "%~dp0"
 set "PROJECT_ROOT=%cd%"
 
-:: 数据库配置
+set "NO_PAUSE=0"
+if /I "%~1"=="--no-pause" set "NO_PAUSE=1"
+
 set "DB_HOST=localhost"
 set "DB_USER=root"
 set "DB_PASS=123456"
 set "DB_NAME=gym_fitness_analytics"
 
-echo 项目根目录: %PROJECT_ROOT%
+echo Project root: %PROJECT_ROOT%
 echo.
 
-:: 检测数据库连接
-echo [1/4] 检测数据库连接...
+echo [1/5] Check database connection...
 mysql -h%DB_HOST% -u%DB_USER% -p%DB_PASS% -e "USE %DB_NAME%; SELECT 1;" >nul 2>&1
 if errorlevel 1 (
-    echo ✗ 数据库连接失败
-    echo   请先运行 init-database.bat 初始化数据库
+    echo [X] Database connection failed.
+    echo     Please run init-database.bat first.
     pause
     exit /b 1
 )
-echo ✓ 数据库连接成功
+echo [OK] Database connection passed.
 echo.
 
-:: 检测后端依赖
-echo [2/4] 检测项目依赖...
-if not exist "%PROJECT_ROOT%\backend\gym-web\target" (
-    echo ⚠ 后端未编译，正在编译...
+echo [2/5] Check and install dependencies...
+if not exist "%PROJECT_ROOT%\backend\target" (
+    echo     Backend not compiled, building...
     cd /d "%PROJECT_ROOT%\backend"
     call mvn clean install -DskipTests -q
     if errorlevel 1 (
-        echo ✗ 后端编译失败，请先运行 install-deps.bat
+        echo [X] Backend build failed. Please run install-deps.bat
         pause
         exit /b 1
     )
 )
+
 if not exist "%PROJECT_ROOT%\frontend\node_modules" (
-    echo ⚠ 前端依赖未安装，正在安装...
+    echo     Frontend dependencies missing, installing...
     cd /d "%PROJECT_ROOT%\frontend"
     call npm install
     if errorlevel 1 (
-        echo ✗ 前端依赖安装失败，请先运行 install-deps.bat
-        pause
-        exit /b 1
+        echo     npm failed, retry with npm.cmd...
+        call npm.cmd install
+        if errorlevel 1 (
+            echo [X] Frontend dependency install failed. Please run install-deps.bat
+            pause
+            exit /b 1
+        )
     )
 )
-echo ✓ 项目依赖检测完成
+echo [OK] Dependency check passed.
 echo.
 
-:: 启动后端服务
-echo [3/4] 启动后端服务 (端口 8080)...
-cd /d "%PROJECT_ROOT%\backend\gym-web"
-start "后端服务 - Spring Boot" cmd /k "title 后端服务 - Spring Boot && mvn spring-boot:run"
-echo ✓ 后端服务启动中...
+echo [3/5] Auto clean port 8080 before backend start...
+set "PORT_8080_FOUND=0"
+set "KILLED_PIDS=;"
+for /f "tokens=5" %%P in ('netstat -ano ^| findstr ":8080" ^| findstr "LISTENING"') do (
+    if "!KILLED_PIDS:;%%P;=!"=="!KILLED_PIDS!" (
+        set "PORT_8080_FOUND=1"
+        echo     Found PID %%P on port 8080, stopping...
+        taskkill /F /PID %%P >nul 2>&1
+        if errorlevel 1 (
+            echo [WARN] Failed to stop PID %%P. Try Administrator terminal.
+        ) else (
+            echo [OK] Stopped PID %%P
+        )
+        set "KILLED_PIDS=!KILLED_PIDS!%%P;"
+    )
+)
+if "!PORT_8080_FOUND!"=="0" (
+    echo [OK] Port 8080 is already free.
+)
 echo.
 
-:: 等待后端启动
-echo 等待后端服务启动 (约10秒)...
-timeout /t 10 /nobreak >nul
+echo [4/5] Start backend service (port 8080)...
+cd /d "%PROJECT_ROOT%\backend"
+start "Backend - Spring Boot" cmd /k "title Backend - Spring Boot && call mvn spring-boot:run"
+echo [OK] Backend start command sent.
+echo.
 
-:: 启动前端服务
-echo [4/4] 启动前端服务 (端口 3000)...
+echo Waiting for backend startup (10s)...
+timeout /t 10 /nobreak >nul 2>&1
+if errorlevel 1 ping 127.0.0.1 -n 11 >nul
+
+echo [5/5] Auto clean port 3000 before frontend start...
+set "PORT_3000_FOUND=0"
+set "KILLED_PIDS=;"
+for /f "tokens=5" %%P in ('netstat -ano ^| findstr ":3000" ^| findstr "LISTENING"') do (
+    if "!KILLED_PIDS:;%%P;=!"=="!KILLED_PIDS!" (
+        set "PORT_3000_FOUND=1"
+        echo     Found PID %%P on port 3000, stopping...
+        taskkill /F /PID %%P >nul 2>&1
+        if errorlevel 1 (
+            echo [WARN] Failed to stop PID %%P. Try Administrator terminal.
+        ) else (
+            echo [OK] Stopped PID %%P
+        )
+        set "KILLED_PIDS=!KILLED_PIDS!%%P;"
+    )
+)
+if "!PORT_3000_FOUND!"=="0" (
+    echo [OK] Port 3000 is already free.
+)
+echo.
+
+echo [5/5] Start frontend service (port 3000)...
 cd /d "%PROJECT_ROOT%\frontend"
-start "前端服务 - Vite" cmd /k "title 前端服务 - Vite && npm run dev"
-echo ✓ 前端服务启动中...
+start "Frontend - Vite" cmd /k "title Frontend - Vite && npm.cmd run dev"
+echo [OK] Frontend start command sent.
 echo.
 
-:: 等待前端启动
-echo 等待前端服务启动 (约5秒)...
-timeout /t 5 /nobreak >nul
+echo Waiting for frontend startup (5s)...
+timeout /t 5 /nobreak >nul 2>&1
+if errorlevel 1 ping 127.0.0.1 -n 6 >nul
 
-:: 打开浏览器
-echo 正在打开浏览器...
+echo Opening browser...
 start http://localhost:3000
 
 echo.
 echo ========================================
-echo ✓ 系统启动完成！
-echo.
-echo 访问地址: http://localhost:3000
-echo.
-echo 测试账号:
-echo   学员: test_student / test123
-echo   教练: test_coach / test123  
-echo   管理员: test_admin / test123
-echo.
-echo 提示: 
-echo   - 后端服务窗口请勿关闭
-echo   - 前端服务窗口请勿关闭
-echo   - 按 Ctrl+C 可停止服务
+echo [OK] Startup workflow completed.
+echo Frontend: http://localhost:3000
+echo Backend : http://localhost:8080
 echo ========================================
 echo.
-pause
+if "%NO_PAUSE%"=="0" pause
+exit /b 0

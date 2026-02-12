@@ -1,31 +1,44 @@
 @echo off
 chcp 65001 >nul
+setlocal
+
+set "NO_PAUSE=0"
+if /I "%~1"=="--no-pause" set "NO_PAUSE=1"
 
 echo ========================================
-echo    健身管理系统 - 导入清洗后的数据
+echo    Gym Fitness System - Import Cleaned Data
 echo ========================================
 echo.
 
-:: 获取脚本所在目录
 cd /d "%~dp0"
 
-:: 检查Python
 python --version >nul 2>&1
 if errorlevel 1 (
-    echo ✗ Python 未安装，请先安装 Python 3.8+
-    pause
+    echo [X] Python not found. Please install Python 3.8+
+    if "%NO_PAUSE%"=="0" pause
     exit /b 1
 )
 
-:: 检查依赖
 python -c "import pymysql, pandas, bcrypt" >nul 2>&1
 if errorlevel 1 (
-    echo 正在安装必要的Python依赖...
+    echo Installing required Python packages...
     pip install pymysql pandas bcrypt -q
+    if errorlevel 1 (
+        echo [X] Failed to install Python packages.
+        if "%NO_PAUSE%"=="0" pause
+        exit /b 1
+    )
 )
 
-:: 运行导入脚本
-python database\import_cleaned_data.py
+echo Running full re-import ^(--reset^) ...
+python database\import_cleaned_data.py --reset
+if errorlevel 1 (
+    echo [X] Import failed.
+    if "%NO_PAUSE%"=="0" pause
+    exit /b 1
+)
 
 echo.
-pause
+echo [OK] Import completed.
+if "%NO_PAUSE%"=="0" pause
+exit /b 0

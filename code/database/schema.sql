@@ -149,6 +149,23 @@ CREATE TABLE IF NOT EXISTS user_behavior_analysis (
     UNIQUE KEY uk_analysis_date (analysis_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户行为分析结果表';
 
+-- 8.1 教练待办处理记录表
+CREATE TABLE IF NOT EXISTS coach_todo_actions (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    coach_id BIGINT NOT NULL,
+    student_id BIGINT NOT NULL,
+    todo_key VARCHAR(100) NOT NULL COMMENT '待办唯一键（同一教练-学员-待办维度唯一）',
+    todo_title VARCHAR(100) NOT NULL COMMENT '待办标题',
+    todo_description VARCHAR(255) COMMENT '待办描述',
+    handled_at DATETIME NOT NULL COMMENT '处理时间',
+    updated_at DATETIME NOT NULL COMMENT '更新时间',
+    INDEX idx_coach_id (coach_id),
+    INDEX idx_student_id (student_id),
+    UNIQUE KEY uk_coach_student_todo (coach_id, student_id, todo_key),
+    FOREIGN KEY (coach_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='教练待办处理记录表';
+
 -- 9. 排行榜表
 CREATE TABLE IF NOT EXISTS leaderboards (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
