@@ -1,6 +1,8 @@
 package com.gym.fitness.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gym.fitness.common.exception.BusinessException;
 import com.gym.fitness.common.result.ErrorCode;
 import com.gym.fitness.entity.TrainingPlan;
@@ -18,6 +20,7 @@ import java.util.stream.Collectors;
 public class TrainingPlanService {
     
     private final TrainingPlanMapper trainingPlanMapper;
+    private final ObjectMapper objectMapper;
 
     public TrainingPlanResponse createTrainingPlan(Long coachId, CreatePlanRequest request) {
         if (request.getEndDate().isBefore(request.getStartDate())) {
@@ -34,7 +37,7 @@ public class TrainingPlanService {
         plan.setEndDate(request.getEndDate());
         plan.setStatus("ACTIVE");
         plan.setCompletionRate(0.0);
-        plan.setWeeklySchedule(request.getWeeklySchedule());
+        plan.setWeeklySchedule(normalizeWeeklySchedule(request.getWeeklySchedule()));
         plan.setDescription(request.getDescription());
         plan.setCreatedAt(LocalDateTime.now());
         plan.setUpdatedAt(LocalDateTime.now());
@@ -65,7 +68,7 @@ public class TrainingPlanService {
             plan.setEndDate(request.getEndDate());
         }
         if (request.getWeeklySchedule() != null) {
-            plan.setWeeklySchedule(request.getWeeklySchedule());
+            plan.setWeeklySchedule(normalizeWeeklySchedule(request.getWeeklySchedule()));
         }
         if (request.getDescription() != null) {
             plan.setDescription(request.getDescription());
@@ -153,5 +156,27 @@ public class TrainingPlanService {
         response.setCreatedAt(plan.getCreatedAt());
         response.setUpdatedAt(plan.getUpdatedAt());
         return response;
+    }
+
+    /**
+     * training_plans.weekly_schedule is a JSON column.
+     * Frontend may submit plain text; convert it to a valid JSON string automatically.
+     */
+    private String normalizeWeeklySchedule(String weeklySchedule) {
+        if (weeklySchedule == null || weeklySchedule.trim().isEmpty()) {
+            return null;
+        }
+
+        String trimmed = weeklySchedule.trim();
+        try {
+            JsonNode parsed = objectMapper.readTree(trimmed);
+            return objectMapper.writeValueAsString(parsed);
+        } catch (Exception ignored) {
+            try {
+                return objectMapper.writeValueAsString(trimmed);
+            } catch (Exception e) {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "周训练安排格式不合法");
+            }
+        }
     }
 }

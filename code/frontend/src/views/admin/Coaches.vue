@@ -65,11 +65,11 @@
         <el-form-item label="用户名" prop="username">
           <el-input v-model="formData.username" placeholder="请输入用户名" :disabled="isEdit" />
         </el-form-item>
-        <el-form-item label="密码" prop="password" :required="!isEdit">
+        <el-form-item label="密码" prop="password">
           <el-input
             v-model="formData.password"
             type="password"
-            :placeholder="isEdit ? '不修改请留空' : '请输入密码'"
+            :placeholder="isEdit ? '不修改请留空' : '留空将使用默认密码123456'"
             show-password
           />
         </el-form-item>
@@ -133,12 +133,26 @@ const formData = reactive({
 })
 
 const validatePassword = (rule, value, callback) => {
-  if (!isEdit.value && (!value || value.length < 6)) {
-    callback(new Error('新增教练时密码至少6位'))
+  const text = (value || '').trim()
+  if (!text) {
+    callback()
     return
   }
-  if (value && value.length < 6) {
+  if (text.length < 6) {
     callback(new Error('密码至少6位'))
+    return
+  }
+  callback()
+}
+
+const validatePhone = (rule, value, callback) => {
+  const text = (value || '').trim()
+  if (!text) {
+    callback()
+    return
+  }
+  if (!/^1[3-9]\d{9}$/.test(text)) {
+    callback(new Error('请输入正确的手机号'))
     return
   }
   callback()
@@ -155,10 +169,7 @@ const formRules = {
     { required: true, message: '请输入邮箱', trigger: 'blur' },
     { type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' }
   ],
-  phone: [
-    { required: true, message: '请输入电话', trigger: 'blur' },
-    { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号', trigger: 'blur' }
-  ],
+  phone: [{ validator: validatePhone, trigger: 'blur' }],
   age: [{ required: true, message: '请输入年龄', trigger: 'blur' }],
   gender: [{ required: true, message: '请选择性别', trigger: 'change' }]
 }
@@ -250,10 +261,10 @@ const handleEdit = (row) => {
 
 const buildPayload = () => ({
   username: formData.username,
-  password: formData.password || null,
+  password: (formData.password || '').trim() || null,
   realName: formData.realName,
   email: formData.email,
-  phone: formData.phone,
+  phone: (formData.phone || '').trim() || null,
   age: formData.age,
   gender: formData.gender
 })

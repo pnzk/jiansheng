@@ -33,6 +33,7 @@ public class AdminService {
     private static final String ROLE_COACH = "COACH";
     private static final String ROLE_STUDENT = "STUDENT";
     private static final String ROLE_ADMIN = "ADMIN";
+    private static final String DEFAULT_INITIAL_PASSWORD = "123456";
     private static final Set<String> FITNESS_GOALS = Set.of("WEIGHT_LOSS", "FAT_LOSS", "MUSCLE_GAIN");
 
     private final UserMapper userMapper;
@@ -61,13 +62,13 @@ public class AdminService {
     }
 
     public void addCoach(CoachRequest request) {
-        validateRequiredPassword(request.getPassword());
         ensureUsernameAvailable(request.getUsername(), null);
         ensureEmailAvailable(request.getEmail(), null);
+        String rawPassword = resolveInitialPassword(request.getPassword());
 
         User coach = new User();
         coach.setUsername(request.getUsername());
-        coach.setPassword(passwordEncoder.encode(request.getPassword()));
+        coach.setPassword(passwordEncoder.encode(rawPassword));
         coach.setRealName(request.getRealName());
         coach.setEmail(request.getEmail());
         coach.setPhone(request.getPhone());
@@ -154,9 +155,9 @@ public class AdminService {
     }
 
     public void addStudent(StudentRequest request) {
-        validateRequiredPassword(request.getPassword());
         ensureUsernameAvailable(request.getUsername(), null);
         ensureEmailAvailable(request.getEmail(), null);
+        String rawPassword = resolveInitialPassword(request.getPassword());
 
         if (request.getCoachId() != null) {
             getRequiredUserByRole(request.getCoachId(), ROLE_COACH, "指定的教练不存在");
@@ -164,7 +165,7 @@ public class AdminService {
 
         User student = new User();
         student.setUsername(request.getUsername());
-        student.setPassword(passwordEncoder.encode(request.getPassword()));
+        student.setPassword(passwordEncoder.encode(rawPassword));
         student.setRealName(request.getRealName());
         student.setEmail(request.getEmail());
         student.setPhone(request.getPhone());
@@ -325,10 +326,11 @@ public class AdminService {
         }
     }
 
-    private void validateRequiredPassword(String password) {
+    private String resolveInitialPassword(String password) {
         if (!hasText(password)) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "密码不能为空");
+            return DEFAULT_INITIAL_PASSWORD;
         }
+        return password.trim();
     }
 
     private boolean hasText(String text) {

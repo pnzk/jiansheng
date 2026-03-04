@@ -36,13 +36,15 @@ public class UserService {
         if (user == null) {
             throw new BusinessException(ErrorCode.USER_NOT_FOUND);
         }
+
+        ensureEmailAvailable(request.getEmail(), userId);
         
-        user.setRealName(request.getRealName());
-        user.setEmail(request.getEmail());
-        user.setPhone(request.getPhone());
+        user.setRealName(trimToNull(request.getRealName()));
+        user.setEmail(trimToNull(request.getEmail()));
+        user.setPhone(trimToNull(request.getPhone()));
         user.setAge(request.getAge());
-        user.setGender(request.getGender());
-        user.setFitnessGoal(request.getFitnessGoal());
+        user.setGender(normalizeGender(request.getGender()));
+        user.setFitnessGoal(normalizeFitnessGoal(request.getFitnessGoal()));
         user.setUpdatedAt(LocalDateTime.now());
         
         userMapper.updateById(user);
@@ -138,5 +140,55 @@ public class UserService {
         response.setShowInLeaderboard(user.getShowInLeaderboard());
         response.setAllowCoachView(user.getAllowCoachView());
         return response;
+    }
+
+    private void ensureEmailAvailable(String email, Long excludeUserId) {
+        QueryWrapper<User> wrapper = new QueryWrapper<>();
+        wrapper.eq("email", trimToNull(email));
+        if (excludeUserId != null) {
+            wrapper.ne("id", excludeUserId);
+        }
+        if (userMapper.selectCount(wrapper) > 0) {
+            throw new BusinessException(ErrorCode.CONFLICT, "邮箱已被占用");
+        }
+    }
+
+    private String normalizeGender(String gender) {
+        if (!StringUtils.hasText(gender)) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "性别不能为空");
+        }
+
+        String normalized = gender.trim().toUpperCase();
+        if ("男".equals(gender) || "MALE".equals(normalized)) {
+            return "MALE";
+        }
+        if ("女".equals(gender) || "FEMALE".equals(normalized)) {
+            return "FEMALE";
+        }
+        throw new BusinessException(ErrorCode.PARAM_ERROR, "性别仅支持 MALE/FEMALE");
+    }
+
+    private String normalizeFitnessGoal(String fitnessGoal) {
+        if (!StringUtils.hasText(fitnessGoal)) {
+            return null;
+        }
+
+        String normalized = fitnessGoal.trim().toUpperCase();
+        if ("BODY_SHAPING".equals(normalized)) {
+            return "FAT_LOSS";
+        }
+        if ("HEALTH".equals(normalized)) {
+            return "WEIGHT_LOSS";
+        }
+        if ("WEIGHT_LOSS".equals(normalized)
+                || "FAT_LOSS".equals(normalized)
+                || "MUSCLE_GAIN".equals(normalized)) {
+            return normalized;
+        }
+        throw new BusinessException(ErrorCode.PARAM_ERROR, "健身目标仅支持 WEIGHT_LOSS/FAT_LOSS/MUSCLE_GAIN");
+    }
+
+    private String trimToNull(String value) {
+        return StringUtils.hasText(value) ? value.trim() : null;
     }
 }

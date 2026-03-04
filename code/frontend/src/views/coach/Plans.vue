@@ -358,6 +358,9 @@ const safeParseWeeklySchedule = (weeklySchedule) => {
   }
   try {
     const json = JSON.parse(weeklySchedule)
+    if (typeof json === 'string') {
+      return json
+    }
     if (Array.isArray(json)) {
       return json.join('；')
     }

@@ -54,6 +54,7 @@ Common options:
 - Import cleaned data (CI/no block) = `code\import-data.bat --no-pause`
 - Import large data (CI/no block) = `code\import-large-data.bat --no-pause`
 - Stop services (no block) = `code\stop.bat --no-pause`
+- Full CRUD consistency check = `code\crud-smoke-test.bat`
 
 Typical new-PC flow:
 ```
