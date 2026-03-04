@@ -6,9 +6,9 @@
       <el-form :inline="true">
         <el-form-item label="时段活跃口径">
           <el-radio-group v-model="hourlyRangeType" @change="onHourlyRangeChange">
-            <el-radio-button label="today">当天</el-radio-button>
-            <el-radio-button label="week">近7天</el-radio-button>
-            <el-radio-button label="month">近30天</el-radio-button>
+            <el-radio-button value="today">当天</el-radio-button>
+            <el-radio-button value="week">近7天</el-radio-button>
+            <el-radio-button value="month">近30天</el-radio-button>
           </el-radio-group>
         </el-form-item>
       </el-form>
@@ -353,6 +353,12 @@ const toHourlySeries = (hourlyDataList) => {
 const loadHourlyDataByRange = async (rangeType) => {
   const meta = getHourlyRangeMeta(rangeType)
   const dateList = buildDateList(meta.days)
+  if (!dateList.length) {
+    hourlyData.value = toHourlySeries([])
+    heatmapDayLabels.value = []
+    heatmapData.value = []
+    return
+  }
   const startDate = dateList[0]
   const endDate = dateList[dateList.length - 1]
 
@@ -506,8 +512,9 @@ const initEquipmentUsageChart = () => {
       itemStyle: {
         color: (params) => {
           const colors = [CHART_COLORS[6], CHART_COLORS[5], CHART_COLORS[1]]
-          if (params.value >= 80) return colors[0]
-          if (params.value >= 60) return colors[1]
+          const value = Number(params?.value || 0)
+          if (value >= 80) return colors[0]
+          if (value >= 60) return colors[1]
           return colors[2]
         }
       },
@@ -527,7 +534,15 @@ const initHeatmapChart = () => {
   chart.setOption({
     tooltip: {
       position: 'top',
-      formatter: (params) => `${yAxisLabels[params.value[1]]} ${hours[params.value[0]]}<br/>活跃人数: <b>${params.value[2]}</b> 人`
+      formatter: (params) => {
+        const value = Array.isArray(params?.value) ? params.value : []
+        const hourIndex = Number.isInteger(value[0]) ? value[0] : 0
+        const dayIndex = Number.isInteger(value[1]) ? value[1] : 0
+        const activeCount = Number(value[2] || 0)
+        const dayLabel = yAxisLabels[dayIndex] || ''
+        const hourLabel = hours[hourIndex] || '0:00'
+        return `${dayLabel} ${hourLabel}<br/>活跃人数: <b>${activeCount}</b> 人`
+      }
     },
     grid: { height: '70%', top: '5%', left: '10%', right: '6%' },
     xAxis: {

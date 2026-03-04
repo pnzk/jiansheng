@@ -16,9 +16,9 @@
         </el-form-item>
         <el-form-item label="时段活跃口径">
           <el-radio-group v-model="hourlyRangeType" @change="loadAnalytics">
-            <el-radio-button label="today">当天</el-radio-button>
-            <el-radio-button label="week">近7天</el-radio-button>
-            <el-radio-button label="month">近30天</el-radio-button>
+            <el-radio-button value="today">当天</el-radio-button>
+            <el-radio-button value="week">近7天</el-radio-button>
+            <el-radio-button value="month">近30天</el-radio-button>
           </el-radio-group>
         </el-form-item>
         <el-form-item>

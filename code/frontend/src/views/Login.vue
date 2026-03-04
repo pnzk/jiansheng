@@ -31,7 +31,7 @@
           <span>或使用以下方式登录</span>
         </div>
         <div class="quick-login">
-          <el-button @click="quickLogin('survey_user_1')" round>
+          <el-button @click="quickLogin('user00001')" round>
             <span class="quick-icon">🎓</span> 学员体验
           </el-button>
           <el-button @click="quickLogin('coach_auto_001')" round>

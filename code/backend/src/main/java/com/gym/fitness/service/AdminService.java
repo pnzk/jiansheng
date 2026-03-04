@@ -21,6 +21,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -45,7 +46,18 @@ public class AdminService {
         wrapper.in("user_role", ROLE_COACH, ROLE_COACH.toLowerCase());
         List<User> coaches = userMapper.selectList(wrapper);
 
-        return coaches.stream().map(this::toCoachResponse).collect(Collectors.toList());
+        QueryWrapper<User> studentWrapper = new QueryWrapper<>();
+        studentWrapper.select("coach_id")
+                .isNotNull("coach_id")
+                .in("user_role", ROLE_STUDENT, ROLE_STUDENT.toLowerCase());
+        List<User> students = userMapper.selectList(studentWrapper);
+        Map<Long, Long> studentCountByCoachId = students.stream()
+                .filter(student -> student.getCoachId() != null)
+                .collect(Collectors.groupingBy(User::getCoachId, Collectors.counting()));
+
+        return coaches.stream()
+                .map(coach -> toCoachResponse(coach, studentCountByCoachId))
+                .collect(Collectors.toList());
     }
 
     public void addCoach(CoachRequest request) {
@@ -109,6 +121,20 @@ public class AdminService {
         wrapper.in("user_role", ROLE_STUDENT, ROLE_STUDENT.toLowerCase());
         List<User> students = userMapper.selectList(wrapper);
 
+        Set<Long> coachIds = students.stream()
+                .map(User::getCoachId)
+                .filter(id -> id != null)
+                .collect(Collectors.toSet());
+        Map<Long, String> coachNameMap = Map.of();
+        if (!coachIds.isEmpty()) {
+            QueryWrapper<User> coachWrapper = new QueryWrapper<>();
+            coachWrapper.in("id", coachIds)
+                    .in("user_role", ROLE_COACH, ROLE_COACH.toLowerCase());
+            coachNameMap = userMapper.selectList(coachWrapper).stream()
+                    .collect(Collectors.toMap(User::getId, User::getRealName));
+        }
+        final Map<Long, String> finalCoachNameMap = coachNameMap;
+
         return students.stream().map(student -> {
             StudentResponse response = new StudentResponse();
             response.setId(student.getId());
@@ -121,13 +147,7 @@ public class AdminService {
             response.setFitnessGoal(student.getFitnessGoal());
             response.setCoachId(student.getCoachId());
             response.setCreatedAt(student.getCreatedAt());
-
-            if (student.getCoachId() != null) {
-                User coach = userMapper.selectById(student.getCoachId());
-                if (coach != null) {
-                    response.setCoachName(coach.getRealName());
-                }
-            }
+            response.setCoachName(finalCoachNameMap.get(student.getCoachId()));
 
             return response;
         }).collect(Collectors.toList());
@@ -257,7 +277,7 @@ public class AdminService {
         }).collect(Collectors.toList());
     }
 
-    private CoachResponse toCoachResponse(User coach) {
+    private CoachResponse toCoachResponse(User coach, Map<Long, Long> studentCountByCoachId) {
         CoachResponse response = new CoachResponse();
         response.setId(coach.getId());
         response.setUsername(coach.getUsername());
@@ -267,11 +287,7 @@ public class AdminService {
         response.setAge(coach.getAge());
         response.setGender(coach.getGender());
         response.setCreatedAt(coach.getCreatedAt());
-
-        QueryWrapper<User> studentWrapper = new QueryWrapper<>();
-        studentWrapper.eq("coach_id", coach.getId())
-                .in("user_role", ROLE_STUDENT, ROLE_STUDENT.toLowerCase());
-        response.setStudentCount(userMapper.selectCount(studentWrapper).intValue());
+        response.setStudentCount(studentCountByCoachId.getOrDefault(coach.getId(), 0L).intValue());
         return response;
     }
 
