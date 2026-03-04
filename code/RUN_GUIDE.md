@@ -44,6 +44,7 @@ Common options:
 ## Command Reference (IDEA + CLI)
 - IDEA `StartAll` = `code\start-all.bat`
 - One-click migrate + start = `code\migrate-and-start.bat`
+- Rebuild DB only (new-PC recommended) = `code\migrate-and-start.bat --db-only`
 - Migrate only (no service start) = `code\migrate-and-start.bat --no-start --no-pause`
 - Scheme-B migrate only = `code\migrate-scheme-b.bat --no-pause`
 - Large dataset migrate = `code\migrate-and-start.bat --large`
