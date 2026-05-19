@@ -3,7 +3,7 @@
     <div class="checkin-header">
       <div>
         <h2>运动打卡</h2>
-        <p>选择运动类型并填写时长，即可完成今日打卡</p>
+        <p>选择运动类型并填写时长，即可完成今日打卡。</p>
       </div>
       <div class="header-tags">
         <el-tag type="success" effect="dark" round>真实落库</el-tag>
@@ -49,10 +49,10 @@
             <el-form-item label="时长(分钟)" prop="durationMinutes">
               <el-input-number v-model="form.durationMinutes" :min="1" :max="480" :step="5" />
               <div class="quick-duration">
-                <el-button size="small" plain @click="setDuration(20)">20分</el-button>
-                <el-button size="small" plain @click="setDuration(30)">30分</el-button>
-                <el-button size="small" plain @click="setDuration(45)">45分</el-button>
-                <el-button size="small" plain @click="setDuration(60)">60分</el-button>
+                <el-button size="small" plain @click="setDuration(20)">20分钟</el-button>
+                <el-button size="small" plain @click="setDuration(30)">30分钟</el-button>
+                <el-button size="small" plain @click="setDuration(45)">45分钟</el-button>
+                <el-button size="small" plain @click="setDuration(60)">60分钟</el-button>
               </div>
             </el-form-item>
 
@@ -82,7 +82,7 @@
           </template>
           <ul class="tips-list">
             <li>打卡提交后会写入数据库的 <code>exercise_records</code> 表。</li>
-            <li>仅需填写“运动类型 + 时长”即可完成打卡记录。</li>
+            <li>只需填写“运动类型 + 时长”即可完成打卡记录。</li>
             <li>系统会自动估算卡路里、心率等辅助数据。</li>
             <li>提交后下方“最近打卡记录”会实时刷新。</li>
           </ul>
@@ -179,9 +179,7 @@ const todayRecords = computed(() => {
 })
 
 const todayCount = computed(() => todayRecords.value.length)
-const todayDuration = computed(() => {
-  return todayRecords.value.reduce((sum, item) => sum + Number(item.durationMinutes || 0), 0)
-})
+const todayDuration = computed(() => todayRecords.value.reduce((sum, item) => sum + Number(item.durationMinutes || 0), 0))
 
 const normalizedRecordDates = computed(() => {
   return Array.from(new Set(
@@ -195,9 +193,7 @@ const latestCheckinDate = computed(() => normalizedRecordDates.value[0] || '')
 
 const streakDays = computed(() => {
   const dateSet = new Set(normalizedRecordDates.value)
-  if (!dateSet.size) {
-    return 0
-  }
+  if (!dateSet.size) return 0
 
   const today = new Date()
   const todayStr = formatDate(today)
@@ -217,9 +213,7 @@ const streakDays = computed(() => {
   let count = 0
   while (true) {
     const currentText = formatDate(cursor)
-    if (!dateSet.has(currentText)) {
-      break
-    }
+    if (!dateSet.has(currentText)) break
     count += 1
     cursor = new Date(cursor)
     cursor.setDate(cursor.getDate() - 1)

@@ -122,7 +122,7 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { register } from '@/api/auth'
+import { login, register } from '@/api/auth'
 
 const router = useRouter()
 const formRef = ref(null)
@@ -194,15 +194,29 @@ const prevStep = () => {
   currentStep.value--
 }
 
+const persistLoginSession = (loginResult) => {
+  localStorage.setItem('token', loginResult.token)
+  localStorage.setItem('userId', loginResult.userId)
+  localStorage.setItem('username', loginResult.username)
+  localStorage.setItem('role', loginResult.role)
+  localStorage.setItem('realName', loginResult.realName)
+}
+
 const handleRegister = async () => {
   loading.value = true
   try {
     const { confirmPassword, ...data } = form
     data.role = 'STUDENT'
     await register(data)
-    
-    ElMessage.success('注册成功，请登录')
-    router.push('/login')
+
+    const loginResult = await login({
+      username: data.username,
+      password: data.password
+    })
+
+    persistLoginSession(loginResult)
+    ElMessage.success('注册成功，已自动登录')
+    router.push('/student/dashboard')
   } catch (error) {
     ElMessage.error(error.message || '注册失败')
   } finally {

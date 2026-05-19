@@ -22,13 +22,13 @@ const routes = [
   },
   {
     path: '/student',
-    component: () => import('@/layouts/StudentLayout.vue'),
+    component: () => import('@/layouts/ResponsiveStudentLayout.vue'),
     meta: { requiresAuth: true, role: 'STUDENT' },
     children: [
       {
         path: 'dashboard',
         name: 'StudentDashboard',
-        component: () => import('@/views/student/Dashboard.vue')
+        component: () => import('@/views/student/ResponsiveDashboard.vue')
       },
       {
         path: 'calendar',
@@ -69,13 +69,13 @@ const routes = [
   },
   {
     path: '/coach',
-    component: () => import('@/layouts/CoachLayout.vue'),
+    component: () => import('@/layouts/ResponsiveCoachLayout.vue'),
     meta: { requiresAuth: true, role: 'COACH' },
     children: [
       {
         path: 'dashboard',
         name: 'CoachDashboard',
-        component: () => import('@/views/coach/Dashboard.vue')
+        component: () => import('@/views/coach/ResponsiveDashboard.vue')
       },
       {
         path: 'students',
@@ -137,15 +137,13 @@ const router = createRouter({
   routes
 })
 
-// 路由守卫
 router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('token')
   const userRole = localStorage.getItem('role')
-  
-  // 检查是否需要认证（包括父路由的meta）
-  const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
-  const requiredRole = to.matched.find(record => record.meta.role)?.meta.role
-  
+
+  const requiresAuth = to.matched.some((record) => record.meta.requiresAuth)
+  const requiredRole = to.matched.find((record) => record.meta.role)?.meta.role
+
   if (requiresAuth && !token) {
     next('/login')
   } else if (requiredRole && requiredRole !== userRole) {

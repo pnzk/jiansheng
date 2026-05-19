@@ -7,18 +7,25 @@ import com.gym.fitness.entity.CoachTodoAction;
 import com.gym.fitness.entity.User;
 import com.gym.fitness.mapper.CoachTodoActionMapper;
 import com.gym.fitness.mapper.UserMapper;
-import com.gym.fitness.service.dto.user.*;
+import com.gym.fitness.service.dto.user.ChangePasswordRequest;
+import com.gym.fitness.service.dto.user.CoachTodoActionResponse;
+import com.gym.fitness.service.dto.user.CoachTodoHandleRequest;
+import com.gym.fitness.service.dto.user.PrivacySettingsRequest;
+import com.gym.fitness.service.dto.user.UpdateProfileRequest;
+import com.gym.fitness.service.dto.user.UserProfileResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class UserService {
-    
+
     private final UserMapper userMapper;
     private final CoachTodoActionMapper coachTodoActionMapper;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
@@ -38,7 +45,7 @@ public class UserService {
         }
 
         ensureEmailAvailable(request.getEmail(), userId);
-        
+
         user.setRealName(trimToNull(request.getRealName()));
         user.setEmail(trimToNull(request.getEmail()));
         user.setPhone(trimToNull(request.getPhone()));
@@ -46,7 +53,7 @@ public class UserService {
         user.setGender(normalizeGender(request.getGender()));
         user.setFitnessGoal(normalizeFitnessGoal(request.getFitnessGoal()));
         user.setUpdatedAt(LocalDateTime.now());
-        
+
         userMapper.updateById(user);
     }
 
@@ -55,11 +62,11 @@ public class UserService {
         if (user == null) {
             throw new BusinessException(ErrorCode.USER_NOT_FOUND);
         }
-        
+
         if (!passwordEncoder.matches(request.getOldPassword(), user.getPassword())) {
             throw new BusinessException(ErrorCode.LOGIN_FAILED, "原密码错误");
         }
-        
+
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         user.setUpdatedAt(LocalDateTime.now());
         userMapper.updateById(user);
@@ -70,11 +77,10 @@ public class UserService {
         if (user == null) {
             throw new BusinessException(ErrorCode.USER_NOT_FOUND);
         }
-        
+
         user.setShowInLeaderboard(request.getShowInLeaderboard());
         user.setAllowCoachView(request.getAllowCoachView());
         user.setUpdatedAt(LocalDateTime.now());
-        
         userMapper.updateById(user);
     }
 
@@ -92,9 +98,7 @@ public class UserService {
             throw new BusinessException(ErrorCode.FORBIDDEN, "无权处理该学员待办事项");
         }
 
-        String normalizedTodoKey = StringUtils.hasText(request.getTodoKey())
-                ? request.getTodoKey().trim()
-                : "FOLLOW_UP_" + request.getStudentId();
+        String normalizedTodoKey = normalizeTodoKey(request.getStudentId(), request.getTodoKey());
         String normalizedTodoTitle = StringUtils.hasText(request.getTodoTitle())
                 ? request.getTodoTitle().trim()
                 : "跟进学员状态";
@@ -111,7 +115,7 @@ public class UserService {
             action.setStudentId(request.getStudentId());
             action.setTodoKey(normalizedTodoKey);
             action.setTodoTitle(normalizedTodoTitle);
-            action.setTodoDescription(request.getTodoDescription());
+            action.setTodoDescription(trimToNull(request.getTodoDescription()));
             action.setHandledAt(LocalDateTime.now());
             action.setUpdatedAt(LocalDateTime.now());
             coachTodoActionMapper.insert(action);
@@ -119,10 +123,65 @@ public class UserService {
         }
 
         existing.setTodoTitle(normalizedTodoTitle);
-        existing.setTodoDescription(request.getTodoDescription());
+        existing.setTodoDescription(trimToNull(request.getTodoDescription()));
         existing.setHandledAt(LocalDateTime.now());
         existing.setUpdatedAt(LocalDateTime.now());
         coachTodoActionMapper.updateById(existing);
+    }
+
+    public boolean hasHandledCoachTodo(Long coachId, Long studentId, String todoKey) {
+        if (coachId == null || studentId == null) {
+            return false;
+        }
+
+        QueryWrapper<CoachTodoAction> wrapper = new QueryWrapper<>();
+        wrapper.eq("coach_id", coachId)
+                .eq("student_id", studentId)
+                .eq("todo_key", normalizeTodoKey(studentId, todoKey));
+        return coachTodoActionMapper.selectCount(wrapper) > 0;
+    }
+
+    public List<CoachTodoActionResponse> getHandledCoachTodos(Long coachId) {
+        QueryWrapper<CoachTodoAction> wrapper = new QueryWrapper<>();
+        wrapper.eq("coach_id", coachId)
+                .orderByDesc("updated_at");
+        return coachTodoActionMapper.selectList(wrapper).stream()
+                .map(action -> {
+                    CoachTodoActionResponse response = new CoachTodoActionResponse();
+                    response.setStudentId(action.getStudentId());
+                    response.setTodoKey(action.getTodoKey());
+                    response.setTodoTitle(action.getTodoTitle());
+                    response.setTodoDescription(action.getTodoDescription());
+                    response.setHandledAt(action.getHandledAt());
+                    return response;
+                })
+                .collect(Collectors.toList());
+    }
+
+    private String normalizeTodoKey(Long studentId, String todoKey) {
+        String raw = StringUtils.hasText(todoKey) ? todoKey.trim() : "";
+        if (raw.startsWith("INACTIVE_DAYS::")
+                || raw.startsWith("NO_EXERCISE_RECORD::")
+                || raw.startsWith("NO_ACTIVE_PLAN::")
+                || raw.startsWith("LOW_PROGRESS::")
+                || raw.startsWith("FOLLOW_UP_")) {
+            return raw;
+        }
+
+        if (raw.contains("未运动")) {
+            return "INACTIVE_DAYS::" + studentId;
+        }
+        if (raw.contains("暂无运动记录")) {
+            return "NO_EXERCISE_RECORD::" + studentId;
+        }
+        if (raw.contains("暂无进行中的训练计划")) {
+            return "NO_ACTIVE_PLAN::" + studentId;
+        }
+        if (raw.contains("计划完成率偏低")) {
+            return "LOW_PROGRESS::" + studentId;
+        }
+
+        return "FOLLOW_UP_" + studentId;
     }
 
     private UserProfileResponse convertToResponse(User user) {

@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -24,6 +25,16 @@ public class AnalyticsService {
     private final BodyMetricMapper bodyMetricMapper;
     private final LeaderboardMapper leaderboardMapper;
     private final TrainingPlanMapper trainingPlanMapper;
+
+    private static final int DEFAULT_RECENT_DAYS = 30;
+    private static final int DEFAULT_WEEK_DAYS = 7;
+    private static final long CACHE_TTL_MILLIS = 30_000L;
+    private final Map<String, CacheEntry<?>> analyticsCache = new ConcurrentHashMap<>();
+
+    @FunctionalInterface
+    private interface SupplierWithException<T> {
+        T get();
+    }
 
     public CoachDashboardResponse getCoachDashboard(Long coachId) {
         if (coachId == null) {
@@ -122,31 +133,51 @@ public class AnalyticsService {
     }
 
     public DashboardStatisticsResponse getDashboardStatistics() {
+        return getDashboardStatistics(null, null);
+    }
+
+    public DashboardStatisticsResponse getDashboardStatistics(LocalDate startDate, LocalDate endDate) {
+        String cacheKey = buildCacheKey("dashboard", startDate, endDate);
+        return getOrCompute(cacheKey, () -> computeDashboardStatistics(startDate, endDate));
+    }
+
+    private DashboardStatisticsResponse computeDashboardStatistics(LocalDate startDate, LocalDate endDate) {
         DashboardStatisticsResponse stats = new DashboardStatisticsResponse();
-        
-        // Total users
+
         stats.setTotalUsers(userMapper.selectCount(null).intValue());
-        
-        // Active users (exercised in last 30 days)
-        LocalDate thirtyDaysAgo = LocalDate.now().minusDays(30);
-        Integer activeUsers = exerciseRecordMapper.countDistinctUsersSince(thirtyDaysAgo);
+
+        DateRangeResolution range = resolveRequestedDateRange(startDate, endDate, DEFAULT_RECENT_DAYS);
+        Integer activeUsers = exerciseRecordMapper.countDistinctUsersInRange(range.getStartDate(), range.getEndDate());
         stats.setActiveUsers(activeUsers == null ? 0 : activeUsers);
-        
-        // Total exercise duration
-        Long totalDuration = exerciseRecordMapper.sumDurationMinutes();
+
+        Long totalDuration = exerciseRecordMapper.sumDurationInRange(range.getStartDate(), range.getEndDate());
         stats.setTotalDurationMinutes(totalDuration == null ? 0 : totalDuration.intValue());
-        
-        // Total calories burned
-        Double totalCalories = exerciseRecordMapper.sumCaloriesBurned();
-        stats.setTotalCaloriesBurned(totalCalories == null ? 0 : totalCalories);
+
+        Double totalCalories = exerciseRecordMapper.sumCaloriesInRange(range.getStartDate(), range.getEndDate());
+        stats.setTotalCaloriesBurned(roundTwo(totalCalories == null ? 0.0 : totalCalories));
+        stats.setPeriodStart(range.getStartDate());
+        stats.setPeriodEnd(range.getEndDate());
+        stats.setFallbackApplied(range.isFallbackApplied());
         
         return stats;
     }
 
     public UserBehaviorAnalysisResponse getUserBehaviorAnalysis(LocalDate startDate, LocalDate endDate) {
-        UserBehaviorAnalysisResponse analysis = new UserBehaviorAnalysisResponse();
+        String cacheKey = buildCacheKey("behavior", startDate, endDate);
+        return getOrCompute(cacheKey, () -> computeUserBehaviorAnalysis(startDate, endDate));
+    }
 
-        List<Map<String, Object>> grouped = exerciseRecordMapper.countByExerciseType(startDate, endDate);
+    private UserBehaviorAnalysisResponse computeUserBehaviorAnalysis(LocalDate startDate, LocalDate endDate) {
+        DateRangeResolution range = resolveRequestedDateRange(startDate, endDate, DEFAULT_WEEK_DAYS);
+        LocalDate actualStartDate = range.getStartDate();
+        LocalDate actualEndDate = range.getEndDate();
+
+        UserBehaviorAnalysisResponse analysis = new UserBehaviorAnalysisResponse();
+        analysis.setPeriodStart(actualStartDate);
+        analysis.setPeriodEnd(actualEndDate);
+        analysis.setFallbackApplied(range.isFallbackApplied());
+
+        List<Map<String, Object>> grouped = exerciseRecordMapper.countByExerciseType(actualStartDate, actualEndDate);
         Map<String, Long> exerciseTypeCounts = new LinkedHashMap<>();
         for (Map<String, Object> row : grouped) {
             String type = row.get("type") == null ? "UNKNOWN" : String.valueOf(row.get("type"));
@@ -164,12 +195,66 @@ public class AnalyticsService {
         analysis.setExerciseTypeDistribution(exerciseTypeCounts);
 
         // Average duration
-        Double avgDuration = exerciseRecordMapper.avgDurationInRange(startDate, endDate);
+        Double avgDuration = exerciseRecordMapper.avgDurationInRange(actualStartDate, actualEndDate);
         analysis.setAverageDurationMinutes(avgDuration == null ? 0 : avgDuration);
 
         // Active user count
-        Integer activeUserCount = exerciseRecordMapper.countDistinctUsersInRange(startDate, endDate);
+        Integer activeUserCount = exerciseRecordMapper.countDistinctUsersInRange(actualStartDate, actualEndDate);
         analysis.setActiveUserCount(activeUserCount == null ? 0 : activeUserCount);
+
+        QueryWrapper<ExerciseRecord> summaryWrapper = new QueryWrapper<>();
+        summaryWrapper.between("exercise_date", actualStartDate, actualEndDate);
+        List<ExerciseRecord> records = exerciseRecordMapper.selectList(summaryWrapper);
+        analysis.setTotalDurationMinutes(records.stream()
+                .map(ExerciseRecord::getDurationMinutes)
+                .filter(Objects::nonNull)
+                .mapToInt(Integer::intValue)
+                .sum());
+        analysis.setTotalCaloriesBurned(roundTwo(records.stream()
+                .map(ExerciseRecord::getCaloriesBurned)
+                .filter(Objects::nonNull)
+                .mapToDouble(Double::doubleValue)
+                .sum()));
+
+        LocalDate retentionWindowStart = actualStartDate.minusDays(30);
+        QueryWrapper<ExerciseRecord> retentionWrapper = new QueryWrapper<>();
+        retentionWrapper.select("user_id", "exercise_date")
+                .between("exercise_date", retentionWindowStart, actualEndDate);
+        List<ExerciseRecord> retentionRecords = exerciseRecordMapper.selectList(retentionWrapper);
+
+        Map<Long, Set<LocalDate>> activityDatesByUser = new HashMap<>();
+        for (ExerciseRecord record : retentionRecords) {
+            if (record.getUserId() == null || record.getExerciseDate() == null) {
+                continue;
+            }
+            activityDatesByUser
+                    .computeIfAbsent(record.getUserId(), key -> new HashSet<>())
+                    .add(record.getExerciseDate());
+        }
+
+        List<Map<String, Object>> dailyRows = exerciseRecordMapper.summarizeDailyActivity(actualStartDate, actualEndDate);
+        Map<LocalDate, Map<String, Object>> dailyRowMap = dailyRows.stream()
+                .map(row -> new AbstractMap.SimpleEntry<>(toLocalDate(row.get("activityDate")), row))
+                .filter(entry -> entry.getKey() != null)
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (left, right) -> right, LinkedHashMap::new));
+
+        List<UserBehaviorAnalysisResponse.DailyActivityPoint> dailyActivity = new ArrayList<>();
+        LocalDate cursor = actualStartDate;
+        while (!cursor.isAfter(actualEndDate)) {
+            Map<String, Object> row = dailyRowMap.get(cursor);
+            UserBehaviorAnalysisResponse.DailyActivityPoint point = new UserBehaviorAnalysisResponse.DailyActivityPoint();
+            point.setDate(cursor);
+            point.setActiveUserCount(getIntValue(row, "activeUserCount"));
+            point.setAverageDurationMinutes(roundTwo(getDoubleValue(row, "averageDurationMinutes")));
+            point.setTotalDurationMinutes(getIntValue(row, "totalDurationMinutes"));
+            point.setTotalCaloriesBurned(roundTwo(getDoubleValue(row, "totalCaloriesBurned")));
+            dailyActivity.add(point);
+            cursor = cursor.plusDays(1);
+        }
+        analysis.setDailyActivity(dailyActivity);
+        analysis.setRetentionRates(buildRetentionRates(activityDatesByUser, actualStartDate, actualEndDate));
+        analysis.setAverageActiveRate(calculateAverageActiveRate(dailyActivity));
+        analysis.setAveragePlanCompletionRate(calculateAveragePlanCompletionRate(actualStartDate, actualEndDate));
 
         return analysis;
     }
@@ -231,10 +316,63 @@ public class AnalyticsService {
         return response;
     }
 
+    public LeaderboardResponse getLeaderboard(String type, int limit, LocalDate startDate, LocalDate endDate) {
+        String cacheKey = buildCacheKey("leaderboard:" + type + ":" + limit, startDate, endDate);
+        return getOrCompute(cacheKey, () -> computeLeaderboard(type, limit, startDate, endDate));
+    }
+
+    private LeaderboardResponse computeLeaderboard(String type, int limit, LocalDate startDate, LocalDate endDate) {
+        DateRangeResolution range = resolveRequestedDateRange(startDate, endDate, DEFAULT_RECENT_DAYS);
+        LocalDate actualStartDate = range.getStartDate();
+        LocalDate actualEndDate = range.getEndDate();
+
+        List<LeaderboardEntry> entries;
+        String normalizedType = type == null ? "" : type.trim().toUpperCase();
+        switch (normalizedType) {
+            case "TOTAL_DURATION":
+                entries = buildRangeLeaderboardEntries(
+                        exerciseRecordMapper.sumDurationByUserInRange(actualStartDate, actualEndDate, limit),
+                        limit
+                );
+                break;
+            case "TOTAL_CALORIES":
+                entries = buildRangeLeaderboardEntries(
+                        exerciseRecordMapper.sumCaloriesByUserInRange(actualStartDate, actualEndDate, limit),
+                        limit
+                );
+                break;
+            case "WEIGHT_LOSS":
+                entries = buildRangeLeaderboardEntries(
+                        bodyMetricMapper.sumWeightLossByUserInRange(actualStartDate, actualEndDate, limit),
+                        limit
+                );
+                break;
+            default:
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "排行榜类型不支持");
+        }
+
+        LeaderboardResponse response = new LeaderboardResponse();
+        response.setType(normalizedType);
+        response.setPeriodStart(actualStartDate);
+        response.setPeriodEnd(actualEndDate);
+        response.setFallbackApplied(range.isFallbackApplied());
+        response.setEntries(entries);
+        return response;
+    }
+
     public PeakHourWarningResponse getPeakHourWarning() {
-        // Get today's exercise records
+        return getPeakHourWarning(LocalDate.now(), LocalDate.now());
+    }
+
+    public PeakHourWarningResponse getPeakHourWarning(LocalDate startDate, LocalDate endDate) {
+        String cacheKey = buildCacheKey("peak-hour", startDate, endDate);
+        return getOrCompute(cacheKey, () -> computePeakHourWarning(startDate, endDate));
+    }
+
+    private PeakHourWarningResponse computePeakHourWarning(LocalDate startDate, LocalDate endDate) {
+        DateRangeResolution range = resolveRequestedDateRange(startDate, endDate, 1);
         QueryWrapper<ExerciseRecord> wrapper = new QueryWrapper<>();
-        wrapper.eq("exercise_date", LocalDate.now());
+        wrapper.between("exercise_date", range.getStartDate(), range.getEndDate());
         List<ExerciseRecord> todayRecords = exerciseRecordMapper.selectList(wrapper);
         
         Map<Integer, Set<Long>> hourUserSets = new HashMap<>();
@@ -250,21 +388,26 @@ public class AnalyticsService {
                 .collect(Collectors.toMap(Map.Entry::getKey, entry -> (long) entry.getValue().size()));
         
         PeakHourWarningResponse response = new PeakHourWarningResponse();
+        response.setPeriodStart(range.getStartDate());
+        response.setPeriodEnd(range.getEndDate());
+        response.setFallbackApplied(range.isFallbackApplied());
         
         if (hourCounts.isEmpty()) {
             response.setIsPeakHour(false);
             response.setCurrentCount(0);
             response.setThreshold(50);
+            response.setPeakCount(0);
             return response;
         }
         
-        int currentHour = LocalTime.now().getHour();
+        int currentHour = resolveCurrentHourForRange(range);
         long currentCount = hourCounts.getOrDefault(currentHour, 0L);
         int threshold = 50;
         
         response.setIsPeakHour(currentCount > threshold);
         response.setCurrentCount((int) currentCount);
         response.setThreshold(threshold);
+        response.setPeakCount((int) hourCounts.values().stream().mapToLong(Long::longValue).max().orElse(0L));
         response.setPeakHour(hourCounts.entrySet().stream()
                 .max(Map.Entry.comparingByValue())
                 .map(Map.Entry::getKey)
@@ -452,18 +595,29 @@ public class AnalyticsService {
     }
 
     public EquipmentUsageResponse getEquipmentUsage() {
-        List<Map<String, Object>> grouped = exerciseRecordMapper.countByEquipmentUsed();
+        return getEquipmentUsage(null, null);
+    }
+
+    public EquipmentUsageResponse getEquipmentUsage(LocalDate startDate, LocalDate endDate) {
+        String cacheKey = buildCacheKey("equipment-usage", startDate, endDate);
+        return getOrCompute(cacheKey, () -> computeEquipmentUsage(startDate, endDate));
+    }
+
+    private EquipmentUsageResponse computeEquipmentUsage(LocalDate startDate, LocalDate endDate) {
+        DateRangeResolution range = resolveRequestedDateRange(startDate, endDate, DEFAULT_RECENT_DAYS);
         Map<String, Long> equipmentCounts = new LinkedHashMap<>();
-        for (Map<String, Object> row : grouped) {
+        for (Map<String, Object> row : exerciseRecordMapper.countByEquipmentUsedInRange(range.getStartDate(), range.getEndDate())) {
             String equipment = row.get("equipment") == null ? "UNKNOWN" : String.valueOf(row.get("equipment"));
-            Number countNumber = (Number) row.get("cnt");
-            long count = countNumber == null ? 0L : countNumber.longValue();
+            long count = row.get("cnt") instanceof Number ? ((Number) row.get("cnt")).longValue() : 0L;
             equipmentCounts.put(equipment, count);
         }
         
         EquipmentUsageResponse response = new EquipmentUsageResponse();
         response.setEquipmentUsage(equipmentCounts);
         response.setTotalUsage(equipmentCounts.values().stream().mapToLong(Long::longValue).sum());
+        response.setPeriodStart(range.getStartDate());
+        response.setPeriodEnd(range.getEndDate());
+        response.setFallbackApplied(range.isFallbackApplied());
         
         return response;
     }
@@ -491,53 +645,60 @@ public class AnalyticsService {
         return entry;
     }
 
+    private List<LeaderboardEntry> buildRangeLeaderboardEntries(List<Map<String, Object>> rows, int limit) {
+        if (rows == null || rows.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<LeaderboardEntry> entries = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            Long userId = getLongValue(row, "userId");
+            if (userId == null) {
+                continue;
+            }
+
+            User user = userMapper.selectById(userId);
+            if (user == null || !Boolean.TRUE.equals(user.getShowInLeaderboard())) {
+                continue;
+            }
+            if (user.getRole() != null && !"STUDENT".equalsIgnoreCase(user.getRole())) {
+                continue;
+            }
+
+            LeaderboardEntry entry = new LeaderboardEntry();
+            entry.setUserId(userId);
+            entry.setUsername(user.getUsername());
+            entry.setRealName(user.getRealName());
+            entry.setValue(roundTwo(getDoubleValue(row, "totalValue")));
+            entries.add(entry);
+        }
+
+        entries.sort(Comparator.comparing(LeaderboardEntry::getValue, Comparator.nullsLast(Comparator.reverseOrder())));
+        if (entries.size() > limit) {
+            entries = new ArrayList<>(entries.subList(0, limit));
+        }
+        for (int i = 0; i < entries.size(); i++) {
+            entries.get(i).setRank(i + 1);
+        }
+        return entries;
+    }
+
     public HourlyActivityResponse getHourlyActivity(LocalDate startDate, LocalDate endDate) {
-        LocalDate actualEndDate = endDate == null ? LocalDate.now() : endDate;
-        LocalDate actualStartDate = startDate == null ? actualEndDate.minusDays(6) : startDate;
-        if (actualStartDate.isAfter(actualEndDate)) {
-            LocalDate swap = actualStartDate;
-            actualStartDate = actualEndDate;
-            actualEndDate = swap;
-        }
+        String cacheKey = buildCacheKey("hourly-activity", startDate, endDate);
+        return getOrCompute(cacheKey, () -> computeHourlyActivity(startDate, endDate));
+    }
 
-        QueryWrapper<ExerciseRecord> wrapper = new QueryWrapper<>();
-        wrapper.between("exercise_date", actualStartDate, actualEndDate);
-        List<ExerciseRecord> records = exerciseRecordMapper.selectList(wrapper);
-
-        // Fallback: if selected date/range has no records, fallback to latest date with records.
-        if (records.isEmpty()) {
-            QueryWrapper<ExerciseRecord> latestDateWrapper = new QueryWrapper<>();
-            latestDateWrapper.select("exercise_date")
-                    .orderByDesc("exercise_date")
-                    .last("LIMIT 1");
-            ExerciseRecord latestRecord = exerciseRecordMapper.selectOne(latestDateWrapper);
-            if (latestRecord != null && latestRecord.getExerciseDate() != null) {
-                actualEndDate = latestRecord.getExerciseDate();
-                if (startDate == null) {
-                    actualStartDate = actualEndDate.minusDays(6);
-                } else {
-                    long span = ChronoUnit.DAYS.between(startDate, actualEndDate);
-                    if (span < 0) {
-                        actualStartDate = actualEndDate;
-                    } else {
-                        actualStartDate = actualEndDate.minusDays(span);
-                    }
-                }
-                wrapper.clear();
-                wrapper.between("exercise_date", actualStartDate, actualEndDate);
-                records = exerciseRecordMapper.selectList(wrapper);
-            }
-        }
-        
-        Map<Integer, Set<Long>> hourUsers = new HashMap<>();
+    private HourlyActivityResponse computeHourlyActivity(LocalDate startDate, LocalDate endDate) {
+        DateRangeResolution range = resolveRequestedDateRange(startDate, endDate, DEFAULT_WEEK_DAYS);
+        LocalDate actualStartDate = range.getStartDate();
+        LocalDate actualEndDate = range.getEndDate();
+        List<Map<String, Object>> rows = exerciseRecordMapper.summarizeHourlyActivity(actualStartDate, actualEndDate);
+        Map<Integer, Integer> hourUsers = new HashMap<>();
         Map<Integer, Integer> hourDurations = new HashMap<>();
-        for (ExerciseRecord record : records) {
-            int hour = resolveActivityHour(record);
-            hourUsers.computeIfAbsent(hour, key -> new HashSet<>());
-            if (record.getUserId() != null) {
-                hourUsers.get(hour).add(record.getUserId());
-            }
-            hourDurations.merge(hour, Optional.ofNullable(record.getDurationMinutes()).orElse(0), Integer::sum);
+        for (Map<String, Object> row : rows) {
+            int hour = getIntValue(row, "activityHour");
+            hourUsers.put(hour, getIntValue(row, "userCount"));
+            hourDurations.put(hour, getIntValue(row, "totalDuration"));
         }
         
         HourlyActivityResponse response = new HourlyActivityResponse();
@@ -549,7 +710,7 @@ public class AnalyticsService {
         for (int hour = 0; hour < 24; hour++) {
             HourlyActivityResponse.HourlyData data = new HourlyActivityResponse.HourlyData();
             data.setHour(hour);
-            int count = hourUsers.getOrDefault(hour, Collections.emptySet()).size();
+            int count = hourUsers.getOrDefault(hour, 0);
             int duration = hourDurations.getOrDefault(hour, 0);
             data.setCount(count);
             data.setDuration(duration);
@@ -564,7 +725,63 @@ public class AnalyticsService {
         response.setHourlyData(hourlyData);
         response.setPeakHour(peakHour);
         response.setPeakCount(peakCount);
+        response.setPeriodStart(actualStartDate);
+        response.setPeriodEnd(actualEndDate);
+        response.setFallbackApplied(range.isFallbackApplied());
         
+        return response;
+    }
+
+    public HourlyHeatmapResponse getHourlyHeatmap(LocalDate startDate, LocalDate endDate) {
+        String cacheKey = buildCacheKey("hourly-heatmap", startDate, endDate);
+        return getOrCompute(cacheKey, () -> computeHourlyHeatmap(startDate, endDate));
+    }
+
+    private HourlyHeatmapResponse computeHourlyHeatmap(LocalDate startDate, LocalDate endDate) {
+        DateRangeResolution range = resolveRequestedDateRange(startDate, endDate, DEFAULT_WEEK_DAYS);
+        LocalDate actualStartDate = range.getStartDate();
+        LocalDate actualEndDate = range.getEndDate();
+        List<Map<String, Object>> rows = exerciseRecordMapper.summarizeHeatmapActivity(actualStartDate, actualEndDate);
+        Map<LocalDate, Map<Integer, Integer>> dayHourUsers = new LinkedHashMap<>();
+        LocalDate cursor = actualStartDate;
+        int dayIndex = 0;
+        List<String> dayLabels = new ArrayList<>();
+        Map<LocalDate, Integer> dayIndexMap = new HashMap<>();
+
+        while (!cursor.isAfter(actualEndDate)) {
+            dayHourUsers.put(cursor, new HashMap<>());
+            dayIndexMap.put(cursor, dayIndex++);
+            dayLabels.add(cursor.toString());
+            cursor = cursor.plusDays(1);
+        }
+
+        for (Map<String, Object> row : rows) {
+            LocalDate activityDate = toLocalDate(row.get("activityDate"));
+            if (activityDate == null || !dayHourUsers.containsKey(activityDate)) {
+                continue;
+            }
+            int hour = getIntValue(row, "activityHour");
+            dayHourUsers.get(activityDate).put(hour, getIntValue(row, "userCount"));
+        }
+
+        List<HourlyHeatmapResponse.HeatmapPoint> points = new ArrayList<>();
+        for (Map.Entry<LocalDate, Map<Integer, Integer>> entry : dayHourUsers.entrySet()) {
+            int currentDayIndex = dayIndexMap.get(entry.getKey());
+            for (int hour = 0; hour < 24; hour++) {
+                HourlyHeatmapResponse.HeatmapPoint point = new HourlyHeatmapResponse.HeatmapPoint();
+                point.setHour(hour);
+                point.setDayIndex(currentDayIndex);
+                point.setCount(entry.getValue().getOrDefault(hour, 0));
+                points.add(point);
+            }
+        }
+
+        HourlyHeatmapResponse response = new HourlyHeatmapResponse();
+        response.setDayLabels(dayLabels);
+        response.setPoints(points);
+        response.setPeriodStart(actualStartDate);
+        response.setPeriodEnd(actualEndDate);
+        response.setFallbackApplied(range.isFallbackApplied());
         return response;
     }
 
@@ -580,8 +797,130 @@ public class AnalyticsService {
         return hour;
     }
 
+    private int resolveCurrentHourForRange(DateRangeResolution range) {
+        if (range == null || range.getEndDate() == null) {
+            return LocalTime.now().getHour();
+        }
+        if (range.getEndDate().isEqual(LocalDate.now())) {
+            return LocalTime.now().getHour();
+        }
+        return 18;
+    }
+
+    private List<UserBehaviorAnalysisResponse.RetentionPoint> buildRetentionRates(
+            Map<Long, Set<LocalDate>> activityDatesByUser,
+            LocalDate startDate,
+            LocalDate endDate
+    ) {
+        int[] checkpoints = {1, 3, 7, 14, 30};
+        if (activityDatesByUser == null || activityDatesByUser.isEmpty()) {
+            return Arrays.stream(checkpoints)
+                    .mapToObj(days -> createRetentionPoint(days, 0, 0))
+                    .collect(Collectors.toList());
+        }
+
+        Map<LocalDate, Set<Long>> usersByDate = new HashMap<>();
+        for (Map.Entry<Long, Set<LocalDate>> entry : activityDatesByUser.entrySet()) {
+            Long userId = entry.getKey();
+            if (userId == null || entry.getValue() == null) {
+                continue;
+            }
+            for (LocalDate activeDate : entry.getValue()) {
+                if (activeDate == null) {
+                    continue;
+                }
+                usersByDate.computeIfAbsent(activeDate, key -> new HashSet<>()).add(userId);
+            }
+        }
+
+        List<UserBehaviorAnalysisResponse.RetentionPoint> retentionPoints = new ArrayList<>();
+        for (int checkpoint : checkpoints) {
+            int cohortSize = 0;
+            int retainedUsers = 0;
+            LocalDate cohortCursor = startDate.minusDays(checkpoint);
+            LocalDate cohortEnd = endDate.minusDays(checkpoint);
+
+            while (!cohortCursor.isAfter(cohortEnd)) {
+                Set<Long> cohortUsers = usersByDate.getOrDefault(cohortCursor, Collections.emptySet());
+                Set<Long> returnUsers = usersByDate.getOrDefault(cohortCursor.plusDays(checkpoint), Collections.emptySet());
+                cohortSize += cohortUsers.size();
+                if (!cohortUsers.isEmpty() && !returnUsers.isEmpty()) {
+                    for (Long userId : cohortUsers) {
+                        if (returnUsers.contains(userId)) {
+                            retainedUsers++;
+                        }
+                    }
+                }
+                cohortCursor = cohortCursor.plusDays(1);
+            }
+
+            retentionPoints.add(createRetentionPoint(
+                    checkpoint,
+                    cohortSize,
+                    retainedUsers
+            ));
+        }
+        return retentionPoints;
+    }
+
+    private UserBehaviorAnalysisResponse.RetentionPoint createRetentionPoint(int days, int cohortSize, int retainedUsers) {
+        UserBehaviorAnalysisResponse.RetentionPoint point = new UserBehaviorAnalysisResponse.RetentionPoint();
+        point.setDays(days);
+        point.setLabel(days + "日");
+        point.setCohortSize(cohortSize);
+        point.setRetainedUsers(retainedUsers);
+        point.setRetentionRate(cohortSize <= 0 ? 0.0 : roundTwo(retainedUsers * 100.0 / cohortSize));
+        return point;
+    }
+
+    private double calculateAverageActiveRate(List<UserBehaviorAnalysisResponse.DailyActivityPoint> dailyActivity) {
+        long totalStudents = countStudentUsers();
+        if (totalStudents <= 0 || dailyActivity == null || dailyActivity.isEmpty()) {
+            return 0.0;
+        }
+
+        double average = dailyActivity.stream()
+                .mapToDouble(point -> {
+                    int activeUsers = point == null || point.getActiveUserCount() == null ? 0 : point.getActiveUserCount();
+                    return activeUsers * 100.0 / totalStudents;
+                })
+                .average()
+                .orElse(0.0);
+        return roundTwo(average);
+    }
+
+    private double calculateAveragePlanCompletionRate(LocalDate startDate, LocalDate endDate) {
+        QueryWrapper<TrainingPlan> wrapper = new QueryWrapper<>();
+        wrapper.in("status", "ACTIVE", "COMPLETED");
+        if (startDate != null) {
+            wrapper.le("start_date", endDate == null ? startDate : endDate);
+        }
+        if (endDate != null) {
+            wrapper.ge("end_date", startDate == null ? endDate : startDate);
+        }
+
+        List<TrainingPlan> plans = trainingPlanMapper.selectList(wrapper);
+        if (plans.isEmpty()) {
+            return 0.0;
+        }
+
+        double average = plans.stream()
+                .map(TrainingPlan::getCompletionRate)
+                .filter(Objects::nonNull)
+                .mapToDouble(Double::doubleValue)
+                .average()
+                .orElse(0.0);
+        return roundTwo(average);
+    }
+
     public ExercisePreferenceResponse getExercisePreference(LocalDate startDate, LocalDate endDate) {
-        List<Map<String, Object>> grouped = exerciseRecordMapper.countByExerciseType(startDate, endDate);
+        String cacheKey = buildCacheKey("exercise-preference", startDate, endDate);
+        return getOrCompute(cacheKey, () -> computeExercisePreference(startDate, endDate));
+    }
+
+    private ExercisePreferenceResponse computeExercisePreference(LocalDate startDate, LocalDate endDate) {
+        DateRangeResolution range = resolveRequestedDateRange(startDate, endDate, DEFAULT_RECENT_DAYS);
+        List<Map<String, Object>> grouped = exerciseRecordMapper.countByExerciseType(range.getStartDate(), range.getEndDate());
         Map<String, Long> typeCounts = new LinkedHashMap<>();
         for (Map<String, Object> row : grouped) {
             String type = row.get("type") == null ? "UNKNOWN" : String.valueOf(row.get("type"));
@@ -613,10 +952,93 @@ public class AnalyticsService {
         
         response.setPreferences(preferences);
         response.setMostPopular(mostPopular);
-        Integer totalUsers = exerciseRecordMapper.countDistinctUsersInRange(startDate, endDate);
+        Integer totalUsers = exerciseRecordMapper.countDistinctUsersInRange(range.getStartDate(), range.getEndDate());
         response.setTotalUsers(totalUsers == null ? 0 : totalUsers);
+        response.setPeriodStart(range.getStartDate());
+        response.setPeriodEnd(range.getEndDate());
+        response.setFallbackApplied(range.isFallbackApplied());
         
         return response;
+    }
+
+    private DateRangeResolution resolveRecentDateRange(int days) {
+        return resolveRequestedDateRange(null, null, days);
+    }
+
+    private DateRangeResolution resolveRequestedDateRange(LocalDate startDate, LocalDate endDate, int defaultDays) {
+        LocalDate latestExerciseDate = getLatestExerciseDate();
+        LocalDate effectiveLatest = latestExerciseDate != null ? latestExerciseDate : LocalDate.now();
+
+        LocalDate actualEndDate = endDate == null ? LocalDate.now() : endDate;
+        LocalDate actualStartDate = startDate == null ? actualEndDate.minusDays(Math.max(defaultDays - 1L, 0L)) : startDate;
+        if (actualStartDate.isAfter(actualEndDate)) {
+            LocalDate swap = actualStartDate;
+            actualStartDate = actualEndDate;
+            actualEndDate = swap;
+        }
+
+        boolean fallbackApplied = false;
+        if (latestExerciseDate != null && actualEndDate.isAfter(effectiveLatest)) {
+            long span = ChronoUnit.DAYS.between(actualStartDate, actualEndDate);
+            actualEndDate = effectiveLatest;
+            actualStartDate = actualEndDate.minusDays(Math.max(span, 0L));
+            fallbackApplied = true;
+        }
+
+        return new DateRangeResolution(actualStartDate, actualEndDate, fallbackApplied);
+    }
+
+    private String buildCacheKey(String prefix, LocalDate startDate, LocalDate endDate) {
+        return prefix + "::" + (startDate == null ? "null" : startDate) + "::" + (endDate == null ? "null" : endDate);
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> T getOrCompute(String cacheKey, SupplierWithException<T> supplier) {
+        long now = System.currentTimeMillis();
+        CacheEntry<?> cached = analyticsCache.get(cacheKey);
+        if (cached != null && cached.expiresAt > now) {
+            return (T) cached.value;
+        }
+
+        try {
+            T value = supplier.get();
+            analyticsCache.put(cacheKey, new CacheEntry<>(value, now + CACHE_TTL_MILLIS));
+            if (analyticsCache.size() > 256) {
+                cleanupExpiredCacheEntries(now);
+            }
+            return value;
+        } catch (Exception e) {
+            if (e instanceof RuntimeException) {
+                throw (RuntimeException) e;
+            }
+            throw new RuntimeException(e);
+        }
+    }
+
+    private void cleanupExpiredCacheEntries(long now) {
+        analyticsCache.entrySet().removeIf(entry -> entry.getValue().expiresAt <= now);
+    }
+
+    private LocalDate getLatestExerciseDate() {
+        QueryWrapper<ExerciseRecord> latestDateWrapper = new QueryWrapper<>();
+        latestDateWrapper.select("exercise_date")
+                .orderByDesc("exercise_date")
+                .last("LIMIT 1");
+        ExerciseRecord latestRecord = exerciseRecordMapper.selectOne(latestDateWrapper);
+        return latestRecord == null ? null : latestRecord.getExerciseDate();
+    }
+
+    @lombok.Value
+    private static class DateRangeResolution {
+        LocalDate startDate;
+        LocalDate endDate;
+        boolean fallbackApplied;
+    }
+
+    @lombok.Value
+    private static class CacheEntry<T> {
+        T value;
+        long expiresAt;
     }
 
     private boolean hasActivePlan(Long studentId, List<TrainingPlan> coachPlans) {
@@ -648,6 +1070,12 @@ public class AnalyticsService {
         return value != null && !value.trim().isEmpty();
     }
 
+    private long countStudentUsers() {
+        QueryWrapper<User> wrapper = new QueryWrapper<>();
+        wrapper.eq("user_role", "STUDENT");
+        return userMapper.selectCount(wrapper);
+    }
+
     private String normalizeGoal(String goal) {
         if ("FAT_LOSS".equalsIgnoreCase(goal)) {
             return "FAT_LOSS";
@@ -660,5 +1088,49 @@ public class AnalyticsService {
 
     private double roundTwo(double value) {
         return Math.round(value * 100.0) / 100.0;
+    }
+
+    private int getIntValue(Map<String, Object> row, String key) {
+        if (row == null) {
+            return 0;
+        }
+        Object value = row.get(key);
+        return value instanceof Number ? ((Number) value).intValue() : 0;
+    }
+
+    private double getDoubleValue(Map<String, Object> row, String key) {
+        if (row == null) {
+            return 0.0;
+        }
+        Object value = row.get(key);
+        return value instanceof Number ? ((Number) value).doubleValue() : 0.0;
+    }
+
+    private Long getLongValue(Map<String, Object> row, String key) {
+        if (row == null) {
+            return null;
+        }
+        Object value = row.get(key);
+        return value instanceof Number ? ((Number) value).longValue() : null;
+    }
+
+    private LocalDate toLocalDate(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof LocalDate) {
+            return (LocalDate) value;
+        }
+        if (value instanceof java.sql.Date) {
+            return ((java.sql.Date) value).toLocalDate();
+        }
+        if (value instanceof java.util.Date) {
+            return new java.sql.Date(((java.util.Date) value).getTime()).toLocalDate();
+        }
+        try {
+            return LocalDate.parse(String.valueOf(value));
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 }

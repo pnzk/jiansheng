@@ -1,0 +1,1 @@
+import{r}from"./request-8508947b.js";const t=e=>r.post("/exercise/add",e),c=e=>r.get("/exercise/records",{params:e}),i=e=>r.get("/exercise/statistics",{params:e}),o=e=>r.delete(`/exercise/${e}`);export{t as a,i as b,o as d,c as g};

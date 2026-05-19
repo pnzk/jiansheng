@@ -1,0 +1,1 @@
+import{r as e}from"./request-8508947b.js";const t=r=>e.get("/exercise-reference/list",{params:r}),c=()=>e.get("/exercise-reference/types"),n=()=>e.get("/exercise-reference/body-parts"),g=()=>e.get("/exercise-reference/levels");export{t as a,n as b,g as c,c as g};

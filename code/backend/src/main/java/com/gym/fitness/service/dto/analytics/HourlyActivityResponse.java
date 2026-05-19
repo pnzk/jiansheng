@@ -1,6 +1,8 @@
 package com.gym.fitness.service.dto.analytics;
 
 import lombok.Data;
+
+import java.time.LocalDate;
 import java.util.List;
 
 @Data
@@ -8,6 +10,9 @@ public class HourlyActivityResponse {
     private List<HourlyData> hourlyData;
     private Integer peakHour;
     private Integer peakCount;
+    private LocalDate periodStart;
+    private LocalDate periodEnd;
+    private Boolean fallbackApplied;
     
     @Data
     public static class HourlyData {

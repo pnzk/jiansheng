@@ -1,8 +1,7 @@
 <template>
   <div class="dashboard">
-    <h2>学员总览仪表盘</h2>
-    
-    <!-- 统计卡片 -->
+    <h2>教练总览仪表盘</h2>
+
     <el-row :gutter="20" style="margin-top: 20px">
       <el-col :span="6">
         <el-card class="stat-card-wrapper">
@@ -20,12 +19,12 @@
       <el-col :span="6">
         <el-card class="stat-card-wrapper">
           <div class="stat-card">
-            <div class="stat-icon male" style="background: linear-gradient(135deg, #409eff, #79bbff)">
+            <div class="stat-icon" style="background: linear-gradient(135deg, #409eff, #79bbff)">
               <el-icon size="30"><Male /></el-icon>
             </div>
             <div class="stat-content">
               <div class="stat-value">{{ stats.maleStudents }}</div>
-              <div class="stat-label">男生学员</div>
+              <div class="stat-label">男学员</div>
             </div>
           </div>
         </el-card>
@@ -33,12 +32,12 @@
       <el-col :span="6">
         <el-card class="stat-card-wrapper">
           <div class="stat-card">
-            <div class="stat-icon female" style="background: linear-gradient(135deg, #f56c6c, #fab6b6)">
+            <div class="stat-icon" style="background: linear-gradient(135deg, #f56c6c, #fab6b6)">
               <el-icon size="30"><Female /></el-icon>
             </div>
             <div class="stat-content">
               <div class="stat-value">{{ stats.femaleStudents }}</div>
-              <div class="stat-label">女生学员</div>
+              <div class="stat-label">女学员</div>
             </div>
           </div>
         </el-card>
@@ -58,12 +57,11 @@
       </el-col>
     </el-row>
 
-    <!-- 健身目标分析 + 待办事项 -->
     <el-row :gutter="20" style="margin-top: 20px">
       <el-col :span="12">
         <el-card>
           <template #header>
-            <span>🎯 学员健身目标分析</span>
+            <span>学员健身目标分析</span>
           </template>
           <div ref="goalChartRef" style="height: 280px"></div>
         </el-card>
@@ -72,14 +70,14 @@
         <el-card class="todo-card">
           <template #header>
             <div class="todo-header">
-              <span>📋 待办事项提醒</span>
+              <span>待办事项提醒</span>
               <el-badge :value="todoList.length" class="todo-badge" />
             </div>
           </template>
           <div class="todo-list">
-            <div 
-              v-for="item in todoList" 
-              :key="item.id" 
+            <div
+              v-for="item in todoList"
+              :key="item.id"
               class="todo-item"
               :class="item.priority"
             >
@@ -108,12 +106,11 @@
       </el-col>
     </el-row>
 
-    <!-- 图表区 -->
     <el-row :gutter="20" style="margin-top: 20px">
       <el-col :span="12">
         <el-card>
           <template #header>
-            <span>📈 学员体重变化趋势</span>
+            <span>学员体重变化趋势</span>
           </template>
           <div ref="weightChartRef" style="height: 300px"></div>
         </el-card>
@@ -121,14 +118,13 @@
       <el-col :span="12">
         <el-card>
           <template #header>
-            <span>🏃 运动类型分布</span>
+            <span>运动类型分布</span>
           </template>
           <div ref="exerciseChartRef" style="height: 300px"></div>
         </el-card>
       </el-col>
     </el-row>
 
-    <!-- 学员列表 -->
     <el-row :gutter="20" style="margin-top: 20px">
       <el-col :span="12">
         <el-card>
@@ -167,12 +163,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
 import { getCoachDashboard } from '@/api/analytics'
-import { getCoachStudents, handleCoachTodo } from '@/api/user'
+import { getCoachStudents, getHandledCoachTodos, handleCoachTodo } from '@/api/user'
 import { CHART_COLORS, initChart } from '@/utils/chartTheme'
 
 const router = useRouter()
@@ -189,71 +184,71 @@ const stats = reactive({
 })
 
 const dashboardData = ref(null)
-
 const todoList = ref([])
-
 const activeStudentsList = ref([])
 const attentionStudentsList = ref([])
 const processingTodoIds = ref(new Set())
+const handledTodoKeys = ref(new Set())
 const inactiveThresholdDays = 7
+
+const createTodoReasonKey = (type, userId) => `${type}::${userId}`
 
 const normalizePlanStatus = (status) => {
   const raw = `${status || ''}`.trim().toLowerCase()
-  if (raw.includes('active') || raw.includes('进行') || raw === 'in_progress') {
-    return 'active'
-  }
-  if (raw.includes('complete') || raw.includes('完成')) {
-    return 'completed'
-  }
+  if (raw.includes('active') || raw.includes('进行')) return 'active'
+  if (raw.includes('complete') || raw.includes('完成')) return 'completed'
   return 'inactive'
 }
 
 const toDateValue = (value) => {
-  if (!value) {
-    return null
-  }
+  if (!value) return null
   const parsed = new Date(value)
   return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
 const formatDateTime = (value) => {
   const date = toDateValue(value)
-  if (!date) {
-    return '-'
-  }
+  if (!date) return '-'
   return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, '0')}-${`${date.getDate()}`.padStart(2, '0')} ${`${date.getHours()}`.padStart(2, '0')}:${`${date.getMinutes()}`.padStart(2, '0')}`
 }
 
 const getInactiveDays = (value) => {
   const date = toDateValue(value)
-  if (!date) {
-    return null
-  }
+  if (!date) return null
   const diff = Date.now() - date.getTime()
   return Math.max(0, Math.floor(diff / (24 * 60 * 60 * 1000)))
 }
 
+const buildTodoKey = (reason, userId) => `${userId}::${reason || `FOLLOW_UP_${userId}`}`
+
+const isHandledTodo = (item) => {
+  const reasonKey = item.reasonKey || item.reason
+  return handledTodoKeys.value.has(buildTodoKey(reasonKey, item.userId))
+    || handledTodoKeys.value.has(buildTodoKey(item.reason, item.userId))
+    || handledTodoKeys.value.has(buildTodoKey(`FOLLOW_UP_${item.userId}`, item.userId))
+}
+
 const handleTodo = async (item) => {
-  if (processingTodoIds.value.has(item.id)) {
-    return
-  }
+  if (processingTodoIds.value.has(item.id)) return
 
   processingTodoIds.value.add(item.id)
-
   try {
     await handleCoachTodo({
       studentId: item.userId,
-      todoKey: item.todoKey,
+      todoKey: item.reason,
       todoTitle: item.title,
       todoDescription: item.description
     })
-
+    handledTodoKeys.value.add(buildTodoKey(item.reason, item.userId))
     todoList.value = todoList.value.filter((todo) => todo.id !== item.id)
+    attentionStudentsList.value = attentionStudentsList.value.filter((student) => !(student.userId === item.userId && student.reason === item.reason))
     ElMessage.success(`已处理: ${item.title}`)
 
     if (item.route) {
       await router.push(item.route)
     }
+  } catch (error) {
+    ElMessage.error(error?.message || '处理待办失败')
   } finally {
     processingTodoIds.value.delete(item.id)
   }
@@ -268,10 +263,15 @@ onMounted(async () => {
 
 const loadData = async () => {
   try {
-    const [coachDashboard, coachStudents] = await Promise.all([
+    const [coachDashboard, coachStudents, handledTodos] = await Promise.all([
       getCoachDashboard(),
-      getCoachStudents()
+      getCoachStudents(),
+      getHandledCoachTodos()
     ])
+
+    handledTodoKeys.value = new Set(
+      (handledTodos || []).map((item) => buildTodoKey(item.todoKey || item.todoDescription, item.studentId))
+    )
 
     dashboardData.value = coachDashboard || {}
     stats.totalStudents = Number(coachDashboard?.totalStudents || 0)
@@ -279,26 +279,16 @@ const loadData = async () => {
     const students = Array.isArray(coachStudents) ? coachStudents : []
 
     const maleFromApi = Number(coachDashboard?.maleStudents || 0)
-    stats.maleStudents = maleFromApi > 0 ? maleFromApi : students.filter((item) => {
-      const gender = `${item.gender || ''}`.toUpperCase()
-      return gender === 'MALE'
-    }).length
+    stats.maleStudents = maleFromApi > 0 ? maleFromApi : students.filter((item) => `${item.gender || ''}`.toUpperCase() === 'MALE').length
     const femaleFromApi = Number(coachDashboard?.femaleStudents || 0)
-    stats.femaleStudents = femaleFromApi > 0 ? femaleFromApi : students.filter((item) => {
-      const gender = `${item.gender || ''}`.toUpperCase()
-      return gender === 'FEMALE'
-    }).length
+    stats.femaleStudents = femaleFromApi > 0 ? femaleFromApi : students.filter((item) => `${item.gender || ''}`.toUpperCase() === 'FEMALE').length
 
     const avgAgeFromApi = Number(coachDashboard?.avgAge || 0)
     if (Number.isFinite(avgAgeFromApi) && avgAgeFromApi > 0) {
       stats.avgAge = Math.round(avgAgeFromApi)
     } else {
-      const ageValues = students
-        .map((item) => Number(item.age))
-        .filter((value) => Number.isFinite(value) && value > 0)
-      stats.avgAge = ageValues.length
-        ? Math.round(ageValues.reduce((sum, value) => sum + value, 0) / ageValues.length)
-        : 0
+      const ageValues = students.map((item) => Number(item.age)).filter((value) => Number.isFinite(value) && value > 0)
+      stats.avgAge = ageValues.length ? Math.round(ageValues.reduce((sum, value) => sum + value, 0) / ageValues.length) : 0
     }
 
     activeStudentsList.value = students
@@ -324,7 +314,10 @@ const loadData = async () => {
           return {
             userId: item.id,
             realName: item.realName || item.username,
-            reason: inactiveDays == null ? '暂无运动记录' : `${inactiveDays}天未运动`
+            reason: inactiveDays == null ? '暂无运动记录' : `${inactiveDays}天未运动`,
+            reasonKey: inactiveDays == null
+              ? createTodoReasonKey('NO_EXERCISE_RECORD', item.id)
+              : createTodoReasonKey('INACTIVE_DAYS', item.id)
           }
         }
 
@@ -332,7 +325,8 @@ const loadData = async () => {
           return {
             userId: item.id,
             realName: item.realName || item.username,
-            reason: '暂无进行中训练计划'
+            reason: '暂无进行中的训练计划',
+            reasonKey: createTodoReasonKey('NO_ACTIVE_PLAN', item.id)
           }
         }
 
@@ -341,23 +335,27 @@ const loadData = async () => {
           return {
             userId: item.id,
             realName: item.realName || item.username,
-            reason: `计划完成率偏低（${Math.round(progress)}%）`
+            reason: `计划完成率偏低（${Math.round(progress)}%）`,
+            reasonKey: createTodoReasonKey('LOW_PROGRESS', item.id)
           }
         }
 
         return null
       })
       .filter(Boolean)
+      .filter((item) => !isHandledTodo(item))
       .slice(0, 5)
 
     todoList.value = attentionStudentsList.value.map((item, index) => ({
       id: `todo-${item.userId}-${index}`,
-      todoKey: item.reason,
+      todoKey: item.reasonKey || item.reason,
       userId: item.userId,
       title: `${item.realName}需要跟进`,
       description: item.reason,
+      reason: item.reason,
+      reasonKey: item.reasonKey || item.reason,
       priority: item.reason.includes('未运动') || item.reason.includes('暂无运动记录') ? 'high' : 'medium',
-      route: '/coach/students'
+      route: `/coach/students/${item.userId}`
     }))
   } catch (error) {
     ElMessage.error('加载数据失败')
@@ -392,10 +390,8 @@ const initGoalChart = () => {
       type: 'pie',
       radius: ['45%', '70%'],
       center: ['60%', '50%'],
-      avoidLabelOverlap: false,
       itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
       label: { show: true, formatter: '{b}\n{c}人' },
-      emphasis: { label: { show: true, fontSize: 16, fontWeight: 'bold' } },
       data
     }]
   })
@@ -405,12 +401,9 @@ const initWeightChart = () => {
   if (!weightChartRef.value) return
   const chart = initChart(weightChartRef.value)
 
-  const trend = Array.isArray(dashboardData.value?.weightTrend)
-    ? dashboardData.value.weightTrend
-    : []
+  const trend = Array.isArray(dashboardData.value?.weightTrend) ? dashboardData.value.weightTrend : []
   const dates = trend.map((item) => item.date)
   const values = trend.map((item) => Number(item.avgWeight || 0))
-
   const safeMin = values.length ? Math.max(Math.floor(Math.min(...values) - 3), 30) : 40
   const safeMax = values.length ? Math.ceil(Math.max(...values) + 3) : 100
 
@@ -418,21 +411,16 @@ const initWeightChart = () => {
     tooltip: { trigger: 'axis' },
     legend: { data: ['平均体重'] },
     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-    xAxis: {
-      type: 'category',
-      data: dates
-    },
+    xAxis: { type: 'category', data: dates },
     yAxis: { type: 'value', name: '体重(kg)', min: safeMin, max: safeMax },
-    series: [
-      {
-        name: '平均体重',
-        data: values,
-        type: 'line',
-        smooth: true,
-        itemStyle: { color: CHART_COLORS[0] },
-        areaStyle: { opacity: 0.2 }
-      }
-    ]
+    series: [{
+      name: '平均体重',
+      data: values,
+      type: 'line',
+      smooth: true,
+      itemStyle: { color: CHART_COLORS[0] },
+      areaStyle: { opacity: 0.2 }
+    }]
   })
 }
 

@@ -2,14 +2,14 @@
   <div class="reports-page">
     <h2>学员效果对比报告</h2>
 
-    <el-card style="margin-top: 20px">
-      <el-form :inline="true">
+    <el-card class="filter-card" style="margin-top: 20px">
+      <el-form :inline="!isMobileLayout" class="report-form">
         <el-form-item label="选择学员">
           <el-select
             v-model="selectedStudents"
             multiple
             placeholder="最多选择5个学员"
-            style="width: 420px"
+            :style="{ width: isMobileLayout ? '100%' : '420px' }"
             :max-collapse-tags="3"
           >
             <el-option
@@ -28,17 +28,17 @@
             range-separator="至"
             start-placeholder="开始日期"
             end-placeholder="结束日期"
-            style="width: 300px"
+            :style="{ width: isMobileLayout ? '100%' : '300px' }"
           />
         </el-form-item>
-        <el-form-item>
+        <el-form-item class="form-actions">
           <el-button type="primary" @click="generateReport">生成报告</el-button>
           <el-button @click="resetFilters">重置</el-button>
         </el-form-item>
       </el-form>
     </el-card>
 
-    <el-card v-if="reportData.length > 0" style="margin-top: 20px">
+    <el-card v-if="reportData.length > 0 && !isMobileLayout" class="result-card" style="margin-top: 20px">
       <template #header>
         <div style="display: flex; justify-content: space-between; align-items: center">
           <span>学员对比数据</span>
@@ -67,6 +67,38 @@
         </el-table-column>
       </el-table>
     </el-card>
+
+    <div v-if="reportData.length > 0 && isMobileLayout" class="mobile-report-list">
+      <el-card v-for="row in reportData" :key="row.studentId" class="mobile-report-card" shadow="never">
+        <div class="mobile-report-top">
+          <div class="mobile-report-name">{{ row.studentName }}</div>
+          <el-tag size="small" :type="getProgressColor(row.planProgress) === '#67c23a' ? 'success' : getProgressColor(row.planProgress) === '#e6a23c' ? 'warning' : 'danger'">
+            {{ Math.round(Number(row.planProgress || 0)) }}%
+          </el-tag>
+        </div>
+
+        <div class="mobile-metrics">
+          <div class="metric-item">
+            <span class="metric-label">体重变化</span>
+            <span class="metric-value" :class="{ good: Number(row.weightChange) < 0, bad: Number(row.weightChange) > 0 }">
+              {{ row.weightChange > 0 ? '+' : '' }}{{ row.weightChange }} kg
+            </span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">总运动时长</span>
+            <span class="metric-value">{{ row.totalDuration }} 分钟</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">总消耗</span>
+            <span class="metric-value">{{ row.totalCalories }} kcal</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">平均单次时长</span>
+            <span class="metric-value">{{ row.avgDuration }} 分钟</span>
+          </div>
+        </div>
+      </el-card>
+    </div>
 
     <el-row v-if="reportData.length > 0" :gutter="20" style="margin-top: 20px">
       <el-col :span="12">
@@ -109,7 +141,7 @@
 </template>
 
 <script setup>
-import { nextTick, onMounted, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
 import { getCoachStudents } from '@/api/user'
@@ -120,6 +152,7 @@ const selectedStudents = ref([])
 const dateRange = ref([])
 const studentList = ref([])
 const reportData = ref([])
+const isMobileLayout = ref(false)
 
 const weightCompareChartRef = ref(null)
 const durationCompareChartRef = ref(null)
@@ -127,7 +160,13 @@ const caloriesCompareChartRef = ref(null)
 const progressCompareChartRef = ref(null)
 
 onMounted(async () => {
+  syncViewport()
+  window.addEventListener('resize', syncViewport)
   await loadStudentList()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', syncViewport)
 })
 
 const loadStudentList = async () => {
@@ -202,6 +241,11 @@ const formatNumber = (value) => {
     return '-'
   }
   return Number(numeric.toFixed(1))
+}
+
+const syncViewport = () => {
+  if (typeof window === 'undefined') return
+  isMobileLayout.value = window.innerWidth <= 768
 }
 
 const initCharts = () => {
@@ -320,5 +364,94 @@ const exportReport = () => {
 <style scoped>
 .reports-page h2 {
   margin-bottom: 20px;
+}
+
+.report-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+}
+
+.form-actions {
+  margin-left: auto;
+}
+
+.mobile-report-list {
+  margin-top: 20px;
+  display: grid;
+  gap: 12px;
+}
+
+.mobile-report-card {
+  border-radius: 14px;
+  border: 1px solid #e6edfc;
+  box-shadow: 0 6px 18px rgba(58, 90, 170, 0.08);
+}
+
+.mobile-report-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.mobile-report-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #273655;
+}
+
+.mobile-metrics {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.metric-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.metric-label {
+  color: #8a95ab;
+  font-size: 13px;
+}
+
+.metric-value {
+  color: #273655;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: right;
+}
+
+.metric-value.good {
+  color: #67c23a;
+}
+
+.metric-value.bad {
+  color: #f56c6c;
+}
+
+@media (max-width: 768px) {
+  .report-form {
+    display: block;
+  }
+
+  .report-form :deep(.el-form-item) {
+    display: block;
+    margin-right: 0;
+    margin-bottom: 14px;
+  }
+
+  .form-actions :deep(.el-form-item__content) {
+    display: flex;
+    gap: 8px;
+  }
+
+  .form-actions .el-button {
+    flex: 1 1 0;
+  }
 }
 </style>

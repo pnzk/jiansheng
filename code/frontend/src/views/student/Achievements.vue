@@ -3,11 +3,11 @@
     <h2>健身成就与排行榜</h2>
 
     <el-tabs v-model="activeTab">
-      <el-tab-pane label="成就勋章墙" name="achievements">
+      <el-tab-pane label="成就徽章墙" name="achievements">
         <el-row :gutter="20" style="margin-bottom: 20px">
           <el-col :span="8">
             <el-card class="stats-card">
-              <div class="stats-icon">🏅</div>
+              <div class="stats-icon">奖</div>
               <div class="stats-info">
                 <div class="stats-value">{{ unlockedCount }}/{{ achievements.length }}</div>
                 <div class="stats-label">已解锁成就</div>
@@ -16,7 +16,7 @@
           </el-col>
           <el-col :span="8">
             <el-card class="stats-card">
-              <div class="stats-icon">🏃</div>
+              <div class="stats-icon">练</div>
               <div class="stats-info">
                 <div class="stats-value">{{ totalExercises }}</div>
                 <div class="stats-label">累计运动次数</div>
@@ -25,7 +25,7 @@
           </el-col>
           <el-col :span="8">
             <el-card class="stats-card">
-              <div class="stats-icon">🔥</div>
+              <div class="stats-icon">燃</div>
               <div class="stats-info">
                 <div class="stats-value">{{ totalCalories.toLocaleString() }}</div>
                 <div class="stats-label">累计消耗卡路里</div>
@@ -36,7 +36,7 @@
 
         <el-card>
           <template #header>
-            <span>🏆 成就勋章墙</span>
+            <span>成就徽章墙</span>
           </template>
           <el-row :gutter="20">
             <el-col :span="6" v-for="achievement in achievements" :key="achievement.id">
@@ -61,7 +61,7 @@
 
         <el-card style="margin-top: 20px">
           <template #header>
-            <span>📅 成就解锁时间线</span>
+            <span>成就解锁时间线</span>
           </template>
           <el-timeline>
             <el-timeline-item
@@ -92,7 +92,7 @@
             <el-card>
               <template #header>
                 <div class="leaderboard-header">
-                  <span>🏋️ 减重排行榜</span>
+                  <span>减重排行榜</span>
                   <el-tag type="danger" size="small">本月</el-tag>
                 </div>
               </template>
@@ -124,7 +124,7 @@
             <el-card>
               <template #header>
                 <div class="leaderboard-header">
-                  <span>⏱️ 运动时长排行榜</span>
+                  <span>运动时长排行榜</span>
                   <el-tag type="warning" size="small">本月</el-tag>
                 </div>
               </template>
@@ -193,16 +193,16 @@ const unlockedTimeline = computed(() => {
 
 const getAchievementIcon = (type) => {
   const icons = {
-    EXERCISE_COUNT: '🏅',
-    CONSECUTIVE_DAYS: '📅',
-    TOTAL_CALORIES: '🔥',
-    RUNNING_DISTANCE: '🏃',
-    WEIGHT_LOSS: '⚖️',
-    FAT_LOSS: '🎯',
-    MUSCLE_GAIN: '💪',
-    SINGLE_DURATION: '⏱️'
+    EXERCISE_COUNT: '练',
+    CONSECUTIVE_DAYS: '连',
+    TOTAL_CALORIES: '燃',
+    RUNNING_DISTANCE: '跑',
+    WEIGHT_LOSS: '减',
+    FAT_LOSS: '脂',
+    MUSCLE_GAIN: '肌',
+    SINGLE_DURATION: '时'
   }
-  return icons[type] || '🏆'
+  return icons[type] || '成'
 }
 
 const getTimelineColor = (type) => {
@@ -216,20 +216,11 @@ const getTimelineColor = (type) => {
 }
 
 const getProgress = (achievement) => {
-  if (achievement?.unlocked) {
-    return 100
-  }
-
+  if (achievement?.unlocked) return 100
   const threshold = Number(achievement?.thresholdValue || 0)
-  if (!Number.isFinite(threshold) || threshold <= 0) {
-    return 0
-  }
-
+  if (!Number.isFinite(threshold) || threshold <= 0) return 0
   const currentValue = getAchievementCurrentValue(achievement?.achievementType)
-  if (!Number.isFinite(currentValue) || currentValue <= 0) {
-    return 0
-  }
-
+  if (!Number.isFinite(currentValue) || currentValue <= 0) return 0
   return Math.min(Math.round((currentValue / threshold) * 100), 100)
 }
 
@@ -260,9 +251,7 @@ const getAchievementCurrentValue = (type) => {
 }
 
 const formatDate = (date) => {
-  if (!date) {
-    return ''
-  }
+  if (!date) return ''
   return new Date(date).toLocaleDateString('zh-CN')
 }
 
@@ -280,9 +269,8 @@ const getRankIcon = (index) => {
 
 const loadAchievements = async () => {
   try {
-    const data = await getUserAchievements()
-    achievements.value = data || []
-  } catch (error) {
+    achievements.value = await getUserAchievements() || []
+  } catch {
     achievements.value = []
   }
 }
@@ -300,10 +288,9 @@ const loadLeaderboards = async () => {
       getLeaderboard('WEIGHT_LOSS', 10),
       getLeaderboard('TOTAL_DURATION', 10)
     ])
-
     weightLossLeaderboard.value = normalizeLeaderboard(weightLossData)
     durationLeaderboard.value = normalizeLeaderboard(durationData)
-  } catch (error) {
+  } catch {
     weightLossLeaderboard.value = []
     durationLeaderboard.value = []
   }
@@ -339,7 +326,6 @@ const loadStats = async () => {
     if (sortedMetrics.length >= 2) {
       const first = sortedMetrics[0]
       const latest = sortedMetrics[sortedMetrics.length - 1]
-
       achievementProgressState.weightLoss = roundOneDecimal(Math.max(Number(first.weightKg || 0) - Number(latest.weightKg || 0), 0))
       achievementProgressState.fatLoss = roundOneDecimal(Math.max(Number(first.bodyFatPercentage || 0) - Number(latest.bodyFatPercentage || 0), 0))
       achievementProgressState.muscleGain = roundOneDecimal(Math.max(Number(latest.muscleMassKg || 0) - Number(first.muscleMassKg || 0), 0))
@@ -348,10 +334,9 @@ const loadStats = async () => {
       achievementProgressState.fatLoss = 0
       achievementProgressState.muscleGain = 0
     }
-  } catch (error) {
+  } catch {
     totalExercises.value = 0
     totalCalories.value = 0
-
     achievementProgressState.totalExercises = 0
     achievementProgressState.totalCalories = 0
     achievementProgressState.maxDuration = 0
@@ -364,23 +349,16 @@ const loadStats = async () => {
 }
 
 const calculateLongestStreak = (records) => {
-  if (!records.length) {
-    return 0
-  }
-
+  if (!records.length) return 0
   const uniqueDates = [...new Set(records
     .map((item) => (item?.exerciseDate ? normalizeDateString(item.exerciseDate) : null))
     .filter(Boolean))]
     .sort()
-
-  if (!uniqueDates.length) {
-    return 0
-  }
+  if (!uniqueDates.length) return 0
 
   let longest = 1
   let current = 1
-
-  for (let i = 1; i < uniqueDates.length; i++) {
+  for (let i = 1; i < uniqueDates.length; i += 1) {
     const previous = new Date(`${uniqueDates[i - 1]}T00:00:00`)
     const next = new Date(`${uniqueDates[i]}T00:00:00`)
     const days = Math.round((next - previous) / (24 * 60 * 60 * 1000))
@@ -391,7 +369,6 @@ const calculateLongestStreak = (records) => {
       current = 1
     }
   }
-
   return longest
 }
 
@@ -399,21 +376,16 @@ const estimateRunningDistance = (records) => {
   const runningMinutes = records
     .filter((item) => /跑|run/i.test(`${item?.exerciseType || ''}`))
     .reduce((sum, item) => sum + Number(item.durationMinutes || 0), 0)
-
   return roundOneDecimal((runningMinutes / 60) * 8)
 }
 
 const normalizeDateString = (value) => {
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return null
-  }
+  if (Number.isNaN(date.getTime())) return null
   return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, '0')}-${`${date.getDate()}`.padStart(2, '0')}`
 }
 
-const roundOneDecimal = (value) => {
-  return Number(Number(value || 0).toFixed(1))
-}
+const roundOneDecimal = (value) => Number(Number(value || 0).toFixed(1))
 
 onMounted(() => {
   loadAchievements()
@@ -434,8 +406,17 @@ onMounted(() => {
 }
 
 .stats-icon {
-  font-size: 40px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #eef4ff;
+  color: #409eff;
+  font-size: 24px;
   margin-right: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
 }
 
 .stats-info {
@@ -485,7 +466,16 @@ onMounted(() => {
 }
 
 .badge-icon {
-  font-size: 48px;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: #eef4ff;
+  color: #409eff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 700;
   z-index: 1;
 }
 
@@ -545,7 +535,15 @@ onMounted(() => {
 }
 
 .timeline-icon {
-  font-size: 32px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #eef4ff;
+  color: #409eff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
 }
 
 .timeline-title {

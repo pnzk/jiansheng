@@ -6,9 +6,11 @@ import java.time.LocalDate;
 
 @Data
 public class UpdatePlanRequest {
+    private Long studentId;
     private String planName;
     private String goalType;
     private Double targetValue;
+    private LocalDate startDate;
     private LocalDate endDate;
     private String weeklySchedule;
     private String description;

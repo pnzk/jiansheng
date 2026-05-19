@@ -124,7 +124,10 @@ def build_recent_records(cursor, student_id, goal):
     if week_count == 0:
         weekday = date.today().weekday()
         week_start = date.today() - timedelta(days=weekday)
-        day = week_start + timedelta(days=random.randint(0, max(weekday, 0)))
+        if weekday <= 0:
+            day = date.today() - timedelta(days=random.randint(1, 3))
+        else:
+            day = week_start + timedelta(days=random.randint(0, weekday - 1))
         insert_exercise_record(cursor, student_id, goal_key, day)
         inserted += 1
 
@@ -189,6 +192,12 @@ def ensure_recent_metrics(cursor, student_id, goal):
                 user_id, measurement_date, weight_kg, body_fat_percentage,
                 height_cm, bmi, muscle_mass_kg, created_at
             ) VALUES (%s,%s,%s,%s,%s,%s,%s,NOW())
+            ON DUPLICATE KEY UPDATE
+                weight_kg = VALUES(weight_kg),
+                body_fat_percentage = VALUES(body_fat_percentage),
+                height_cm = VALUES(height_cm),
+                bmi = VALUES(bmi),
+                muscle_mass_kg = VALUES(muscle_mass_kg)
             """,
             (
                 student_id,
@@ -210,6 +219,12 @@ def ensure_recent_metrics(cursor, student_id, goal):
                 user_id, measurement_date, weight_kg, body_fat_percentage,
                 height_cm, bmi, muscle_mass_kg, created_at
             ) VALUES (%s,%s,%s,%s,%s,%s,%s,NOW())
+            ON DUPLICATE KEY UPDATE
+                weight_kg = VALUES(weight_kg),
+                body_fat_percentage = VALUES(body_fat_percentage),
+                height_cm = VALUES(height_cm),
+                bmi = VALUES(bmi),
+                muscle_mass_kg = VALUES(muscle_mass_kg)
             """,
             (
                 student_id,

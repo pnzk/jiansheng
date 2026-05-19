@@ -1,7 +1,7 @@
 <template>
   <div class="calendar-page">
     <h2>运动日历</h2>
-    
+
     <el-card class="filter-card">
       <el-date-picker
         v-model="dateRange"
@@ -12,12 +12,8 @@
         value-format="YYYY-MM-DD"
         @change="loadExerciseRecords"
       />
-      <el-button type="primary" @click="loadExerciseRecords" style="margin-left: 10px">
-        查询
-      </el-button>
-      <el-button type="primary" @click="showAddDialog = true" style="margin-left: 10px">
-        添加运动记录
-      </el-button>
+      <el-button type="primary" @click="loadExerciseRecords" style="margin-left: 10px">查询</el-button>
+      <el-button type="primary" @click="showAddDialog = true" style="margin-left: 10px">添加运动记录</el-button>
     </el-card>
 
     <el-card class="chart-card">
@@ -82,10 +78,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
-import { getUserExerciseRecords, addExerciseRecord, deleteExerciseRecord } from '@/api/exercise'
+import { addExerciseRecord, deleteExerciseRecord, getUserExerciseRecords } from '@/api/exercise'
 import { initChart } from '@/utils/chartTheme'
 
 const dateRange = ref([])
@@ -108,14 +104,13 @@ const addForm = ref({
 const loadExerciseRecords = async () => {
   try {
     const params = {}
-    if (dateRange.value && dateRange.value.length === 2) {
+    if (dateRange.value?.length === 2) {
       params.startDate = dateRange.value[0]
       params.endDate = dateRange.value[1]
     }
-    const data = await getUserExerciseRecords(params)
-    exerciseRecords.value = data
+    exerciseRecords.value = await getUserExerciseRecords(params) || []
     renderChart()
-  } catch (error) {
+  } catch {
     ElMessage.error('加载运动记录失败')
   }
 }
@@ -125,8 +120,8 @@ const addRecord = async () => {
     await addExerciseRecord(addForm.value)
     ElMessage.success('添加成功')
     showAddDialog.value = false
-    loadExerciseRecords()
-  } catch (error) {
+    await loadExerciseRecords()
+  } catch {
     ElMessage.error('添加失败')
   }
 }
@@ -135,8 +130,8 @@ const deleteRecord = async (id) => {
   try {
     await deleteExerciseRecord(id)
     ElMessage.success('删除成功')
-    loadExerciseRecords()
-  } catch (error) {
+    await loadExerciseRecords()
+  } catch {
     ElMessage.error('删除失败')
   }
 }
@@ -145,13 +140,13 @@ const renderChart = () => {
   if (!chart) {
     chart = initChart(chartRef.value)
   }
-  
+
   const typeCount = {}
-  exerciseRecords.value.forEach(record => {
+  exerciseRecords.value.forEach((record) => {
     typeCount[record.exerciseType] = (typeCount[record.exerciseType] || 0) + 1
   })
-  
-  const option = {
+
+  chart.setOption({
     title: { text: '运动类型分布' },
     tooltip: { trigger: 'item' },
     series: [{
@@ -159,9 +154,7 @@ const renderChart = () => {
       radius: '50%',
       data: Object.entries(typeCount).map(([name, value]) => ({ name, value }))
     }]
-  }
-  
-  chart.setOption(option)
+  })
 }
 
 onMounted(() => {
@@ -174,7 +167,9 @@ onMounted(() => {
   padding: 20px;
 }
 
-.filter-card, .chart-card, .table-card {
+.filter-card,
+.chart-card,
+.table-card {
   margin-bottom: 20px;
 }
 </style>

@@ -3,9 +3,10 @@
     <div class="page-header">
       <div>
         <h2>运动库</h2>
-        <p>按身体部位与难度快速筛选，查看标准动作说明</p>
+        <p>按身体部位、难度和关键词筛选，查看标准动作说明</p>
+        <p class="page-tip">这里展示的是系统内置标准动作库，不受个人历史运动记录限制。</p>
       </div>
-      <el-tag type="success" effect="dark" round>真实数据</el-tag>
+      <el-tag type="success" effect="dark" round>标准动作库</el-tag>
     </div>
 
     <el-card class="search-card" shadow="never">
@@ -13,9 +14,10 @@
         <el-col :span="10">
           <el-input
             v-model="searchKeyword"
-            placeholder="搜索动作名称、部位或器材"
+            placeholder="搜索动作名称、部位、器材或描述"
             clearable
             @input="handleSearch"
+            @keyup.enter="submitSearch"
           >
             <template #prefix>
               <el-icon><Search /></el-icon>
@@ -23,18 +25,33 @@
           </el-input>
         </el-col>
         <el-col :span="6">
-          <el-select v-model="selectedBodyPart" clearable placeholder="身体部位" @change="handleFilterChange" style="width: 100%">
+          <el-select
+            v-model="selectedBodyPart"
+            clearable
+            placeholder="身体部位"
+            @change="handleFilterChange"
+            style="width: 100%"
+          >
             <el-option label="全部部位" value="" />
             <el-option v-for="part in bodyParts" :key="part" :label="part" :value="part" />
           </el-select>
         </el-col>
         <el-col :span="6">
-          <el-select v-model="selectedLevel" clearable placeholder="难度等级" @change="handleFilterChange" style="width: 100%">
+          <el-select
+            v-model="selectedLevel"
+            clearable
+            placeholder="难度等级"
+            @change="handleFilterChange"
+            style="width: 100%"
+          >
             <el-option label="全部等级" value="" />
-            <el-option v-for="level in levels" :key="level" :label="level" :value="level" />
+            <el-option v-for="level in levels" :key="level" :label="formatLevel(level)" :value="level" />
           </el-select>
         </el-col>
         <el-col :span="2" class="refresh-col">
+          <el-button type="primary" @click="submitSearch">
+            <el-icon><Search /></el-icon>
+          </el-button>
           <el-button @click="reload" plain>
             <el-icon><Refresh /></el-icon>
           </el-button>
@@ -72,7 +89,9 @@
         <div class="exercise-item" v-for="exercise in exercises" :key="exercise.id" @click="showDetail(exercise)">
           <div class="exercise-top">
             <div class="exercise-icon">{{ getExerciseIcon(exercise.bodyPart) }}</div>
-            <el-tag size="small" class="level-tag" :type="getLevelType(exercise.level)">{{ formatLevel(exercise.level) }}</el-tag>
+            <el-tag size="small" class="level-tag" :type="getLevelType(exercise.level)">
+              {{ formatLevel(exercise.level) }}
+            </el-tag>
           </div>
 
           <div class="exercise-name">{{ exercise.exerciseNameEn }}</div>
@@ -121,10 +140,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { Search, Refresh } from '@element-plus/icons-vue'
+import { onMounted, ref } from 'vue'
+import { Refresh, Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { getExerciseList, getBodyParts, getLevels } from '@/api/exerciseReference'
+import { getBodyParts, getExerciseList, getLevels } from '@/api/exerciseReference'
 
 const searchKeyword = ref('')
 const selectedBodyPart = ref('')
@@ -141,20 +160,22 @@ const total = ref(0)
 const showDetailDialog = ref(false)
 const currentExercise = ref(null)
 
+let searchTimer = null
+
 const bodyPartIcons = {
-  Abdominals: '🎯',
-  Biceps: '💪',
-  Chest: '🫁',
-  Back: '🔙',
-  Shoulders: '🏋️',
-  Legs: '🦵',
-  Triceps: '💪',
-  Glutes: '🍑',
-  Quadriceps: '🦵',
-  Hamstrings: '🦵',
-  Calves: '🦶',
-  Forearms: '💪',
-  default: '🏃'
+  Abdominals: '腹',
+  Biceps: '臂',
+  Chest: '胸',
+  Back: '背',
+  Shoulders: '肩',
+  Legs: '腿',
+  Triceps: '臂',
+  Glutes: '臀',
+  Quadriceps: '腿',
+  Hamstrings: '腿',
+  Calves: '腿',
+  Forearms: '臂',
+  default: '练'
 }
 
 const getExerciseIcon = (bodyPart) => bodyPartIcons[bodyPart] || bodyPartIcons.default
@@ -184,7 +205,7 @@ const loadExercises = async () => {
     const response = await getExerciseList({
       page: currentPage.value,
       size: pageSize.value,
-      keyword: searchKeyword.value || undefined,
+      keyword: searchKeyword.value?.trim() || undefined,
       bodyPart: selectedBodyPart.value || undefined,
       level: selectedLevel.value || undefined
     })
@@ -204,7 +225,7 @@ const loadFilters = async () => {
     bodyParts.value = partsResult || []
     levels.value = levelsResult || []
   } catch (error) {
-    ElMessage.warning(error?.message || '筛选项加载失败，已使用默认显示')
+    ElMessage.warning(error?.message || '筛选项加载失败')
   }
 }
 
@@ -214,6 +235,20 @@ const handleFilterChange = () => {
 }
 
 const handleSearch = () => {
+  currentPage.value = 1
+  if (searchTimer) {
+    clearTimeout(searchTimer)
+  }
+  searchTimer = setTimeout(() => {
+    loadExercises()
+  }, 250)
+}
+
+const submitSearch = () => {
+  if (searchTimer) {
+    clearTimeout(searchTimer)
+    searchTimer = null
+  }
   currentPage.value = 1
   loadExercises()
 }
@@ -258,6 +293,11 @@ onMounted(async () => {
 .page-header p {
   margin: 8px 0 0;
   color: rgba(255, 255, 255, 0.9);
+}
+
+.page-tip {
+  font-size: 12px;
+  opacity: 0.9;
 }
 
 .search-card {
@@ -410,4 +450,3 @@ onMounted(async () => {
   }
 }
 </style>
-

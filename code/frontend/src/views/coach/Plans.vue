@@ -3,7 +3,7 @@
     <div class="page-header gradient-header">
       <div>
         <h2>计划管理</h2>
-        <p class="page-subtitle">集中维护训练计划，支持筛选、查看、编辑与复制</p>
+        <p class="page-subtitle">集中维护训练计划，支持筛选、查看、编辑、复制与新增</p>
       </div>
       <div class="header-tools">
         <el-switch
@@ -17,8 +17,8 @@
     </div>
 
     <el-card class="filter-card" shadow="never">
-      <el-row :gutter="20" align="middle">
-        <el-col :span="5">
+      <el-row :gutter="20" align="middle" class="filter-row">
+        <el-col :span="5" :xs="24" :sm="12" :md="8" :lg="5">
           <el-select v-model="filterStudent" placeholder="选择学员" clearable style="width: 100%">
             <el-option label="全部学员" value="" />
             <el-option
@@ -29,7 +29,7 @@
             />
           </el-select>
         </el-col>
-        <el-col :span="4">
+        <el-col :span="4" :xs="12" :sm="6" :md="6" :lg="4">
           <el-select v-model="filterGoal" placeholder="目标类型" clearable style="width: 100%">
             <el-option label="全部" value="" />
             <el-option label="减重" value="WEIGHT_LOSS" />
@@ -37,7 +37,7 @@
             <el-option label="增肌" value="MUSCLE_GAIN" />
           </el-select>
         </el-col>
-        <el-col :span="4">
+        <el-col :span="4" :xs="12" :sm="6" :md="6" :lg="4">
           <el-select v-model="filterStatus" placeholder="计划状态" clearable style="width: 100%">
             <el-option label="全部" value="" />
             <el-option label="进行中" value="ACTIVE" />
@@ -45,7 +45,7 @@
             <el-option label="已取消" value="CANCELLED" />
           </el-select>
         </el-col>
-        <el-col :span="11" class="filter-actions">
+        <el-col :span="11" :xs="24" :sm="24" :md="24" :lg="11" class="filter-actions">
           <el-button type="primary" @click="applyFilters">查询</el-button>
           <el-button @click="reloadData" plain>
             <el-icon><Refresh /></el-icon>
@@ -59,15 +59,13 @@
       </el-row>
     </el-card>
 
-    <el-card class="table-card" shadow="never">
+    <el-card v-if="!isMobileLayout" class="table-card" shadow="never">
       <el-table :data="plansList" stripe v-loading="loading" style="width: 100%">
         <el-table-column prop="studentName" label="学员" width="120" />
-        <el-table-column prop="planName" label="计划名称" width="200">
+        <el-table-column prop="planName" label="计划名称" width="220">
           <template #default="{ row }">
             <div class="plan-name-cell">
-              <div class="plan-name-main" :style="{ color: getGoalPalette(row.goalType).accent }">
-                {{ row.planName }}
-              </div>
+              <div class="plan-name-main" :style="{ color: getGoalPalette(row.goalType).accent }">{{ row.planName }}</div>
               <div class="plan-name-sub">{{ row.studentName }}</div>
             </div>
           </template>
@@ -101,29 +99,134 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right" align="center">
+        <el-table-column label="操作" :width="isCompactActions ? 116 : 320" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button size="small" text type="primary" @click="viewPlan(row)">
-              <el-icon><View /></el-icon>
-            </el-button>
-            <el-button size="small" text type="warning" @click="editPlan(row)">
-              <el-icon><Edit /></el-icon>
-            </el-button>
-            <el-button size="small" text type="info" @click="copyPlan(row)">
-              <el-icon><CopyDocument /></el-icon>
-            </el-button>
-            <el-button size="small" text type="danger" @click="deletePlan(row)">
-              <el-icon><Delete /></el-icon>
-            </el-button>
+            <div v-if="!isCompactActions" class="action-group-desktop">
+              <el-tooltip content="查看计划详情" placement="top" :show-after="180">
+                <el-button size="small" class="action-btn view-btn" @click="viewPlan(row)">
+                  <el-icon><View /></el-icon>
+                  <span>查看</span>
+                </el-button>
+              </el-tooltip>
+              <el-tooltip content="编辑当前计划" placement="top" :show-after="180">
+                <el-button size="small" class="action-btn edit-btn" @click="editPlan(row)">
+                  <el-icon><Edit /></el-icon>
+                  <span>编辑</span>
+                </el-button>
+              </el-tooltip>
+              <el-tooltip content="复制为新计划，原计划不会被覆盖" placement="top" :show-after="180">
+                <el-button size="small" class="action-btn copy-btn" @click="copyPlan(row)">
+                  <el-icon><CopyDocument /></el-icon>
+                  <span>复制</span>
+                </el-button>
+              </el-tooltip>
+              <el-tooltip content="删除这条计划" placement="top" :show-after="180">
+                <el-button size="small" class="action-btn delete-btn" @click="deletePlan(row)">
+                  <el-icon><Delete /></el-icon>
+                  <span>删除</span>
+                </el-button>
+              </el-tooltip>
+            </div>
+            <div v-else class="action-group-mobile">
+              <el-dropdown trigger="click" @command="(command) => handleRowAction(row, command)">
+                <el-button size="small" class="compact-menu-btn">
+                  <el-icon><MoreFilled /></el-icon>
+                  <span>更多</span>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="view">
+                      <el-icon><View /></el-icon>
+                      <span>查看详情</span>
+                    </el-dropdown-item>
+                    <el-dropdown-item command="edit">
+                      <el-icon><Edit /></el-icon>
+                      <span>编辑计划</span>
+                    </el-dropdown-item>
+                    <el-dropdown-item command="copy">
+                      <el-icon><CopyDocument /></el-icon>
+                      <span>复制为新计划</span>
+                    </el-dropdown-item>
+                    <el-dropdown-item command="delete" divided>
+                      <el-icon><Delete /></el-icon>
+                      <span>删除计划</span>
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
           </template>
         </el-table-column>
       </el-table>
     </el-card>
 
+    <div v-else class="mobile-plan-list" v-loading="loading">
+      <el-empty v-if="!plansList.length && !loading" description="暂无训练计划" :image-size="80" />
+
+      <div v-else class="mobile-plan-grid">
+        <el-card v-for="row in plansList" :key="row.id" class="mobile-plan-card" shadow="never">
+          <div class="mobile-plan-top">
+            <div>
+              <div class="mobile-plan-name" :style="{ color: getGoalPalette(row.goalType).accent }">{{ row.planName }}</div>
+              <div class="mobile-plan-student">{{ row.studentName }}</div>
+            </div>
+            <el-tag :type="getStatusTagType(row.status)" size="small">{{ getStatusText(row.status) }}</el-tag>
+          </div>
+
+          <div class="mobile-plan-meta">
+            <div class="mobile-meta-item">
+              <span class="meta-label">目标</span>
+              <span class="meta-value">{{ getGoalText(row.goalType) }} / {{ row.targetValue }} kg</span>
+            </div>
+            <div class="mobile-meta-item">
+              <span class="meta-label">周期</span>
+              <span class="meta-value">{{ row.startDate }} ~ {{ row.endDate }}</span>
+            </div>
+          </div>
+
+          <div class="mobile-progress">
+            <div class="mobile-progress-head">
+              <span>完成率</span>
+              <strong>{{ Math.round(row.completionRate || 0) }}%</strong>
+            </div>
+            <el-progress
+              :percentage="Math.round(row.completionRate || 0)"
+              :stroke-width="10"
+              :color="getProgressColor(row.completionRate || 0, row.goalType)"
+            />
+          </div>
+
+          <div class="mobile-plan-actions">
+            <el-button class="mobile-action-btn view-btn" @click="viewPlan(row)">
+              <el-icon><View /></el-icon>
+              <span>查看</span>
+            </el-button>
+            <el-button class="mobile-action-btn edit-btn" @click="editPlan(row)">
+              <el-icon><Edit /></el-icon>
+              <span>编辑</span>
+            </el-button>
+            <el-button class="mobile-action-btn copy-btn" @click="copyPlan(row)">
+              <el-icon><CopyDocument /></el-icon>
+              <span>复制</span>
+            </el-button>
+            <el-button class="mobile-action-btn delete-btn" @click="deletePlan(row)">
+              <el-icon><Delete /></el-icon>
+              <span>删除</span>
+            </el-button>
+          </div>
+        </el-card>
+      </div>
+    </div>
+
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="640px" @close="resetPlanForm" class="nice-dialog">
+      <div v-if="dialogMode !== 'create'" class="dialog-mode-banner" :class="`mode-${dialogMode}`">
+        <div class="dialog-mode-title">{{ dialogModeTitle }}</div>
+        <div class="dialog-mode-desc">{{ dialogModeDescription }}</div>
+        <div v-if="copySourceText" class="dialog-mode-source">来源计划：{{ copySourceText }}</div>
+      </div>
       <el-form :model="planForm" label-width="110px">
         <el-form-item label="选择学员" required>
-          <el-select v-model="planForm.studentId" placeholder="请选择学员" :disabled="isEdit" style="width: 100%">
+          <el-select v-model="planForm.studentId" placeholder="请选择学员" style="width: 100%">
             <el-option
               v-for="student in studentList"
               :key="student.id"
@@ -170,7 +273,7 @@
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="savePlan" :loading="saving">保存</el-button>
+        <el-button type="primary" @click="savePlan" :loading="saving">{{ dialogPrimaryActionText }}</el-button>
       </template>
     </el-dialog>
 
@@ -201,14 +304,14 @@
 </template>
 
 <script setup>
-import { computed, ref, reactive, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   createTrainingPlan,
-  updateTrainingPlan,
   deleteTrainingPlan,
-  getCoachTrainingPlans
+  getCoachTrainingPlans,
+  updateTrainingPlan
 } from '@/api/trainingPlan'
 import { getCoachStudents } from '@/api/user'
 
@@ -248,6 +351,18 @@ const GOAL_PALETTES = {
   }
 }
 
+const DAY_LABELS = {
+  monday: '周一',
+  tuesday: '周二',
+  wednesday: '周三',
+  thursday: '周四',
+  friday: '周五',
+  saturday: '周六',
+  sunday: '周日'
+}
+
+const DAY_ORDER = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+
 const route = useRoute()
 
 const filterStudent = ref('')
@@ -256,6 +371,8 @@ const filterStatus = ref('')
 const uiTheme = ref('light')
 const loading = ref(false)
 const saving = ref(false)
+const isCompactActions = ref(false)
+const isMobileLayout = ref(false)
 
 const allPlans = ref([])
 const plansList = ref([])
@@ -264,6 +381,8 @@ const studentList = ref([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('创建训练计划')
 const isEdit = ref(false)
+const dialogMode = ref('create')
+const copySourceText = ref('')
 
 const detailDialogVisible = ref(false)
 const detailPlan = ref(null)
@@ -276,11 +395,27 @@ const isDarkTheme = computed({
 })
 
 const currentPalette = computed(() => GOAL_PALETTES[filterGoal.value] || GOAL_PALETTES.FAT_LOSS)
+const dialogModeTitle = computed(() => {
+  if (dialogMode.value === 'copy') return '正在创建计划副本'
+  if (dialogMode.value === 'edit') return '正在修改原训练计划'
+  return '正在创建新训练计划'
+})
+
+const dialogModeDescription = computed(() => {
+  if (dialogMode.value === 'copy') return '保存后会新增一条计划，原计划内容不会被覆盖。'
+  if (dialogMode.value === 'edit') return '保存后会直接更新当前这条计划，请确认修改内容。'
+  return '为学员新增一条训练计划。'
+})
+
+const dialogPrimaryActionText = computed(() => {
+  if (dialogMode.value === 'copy') return '创建副本'
+  if (dialogMode.value === 'edit') return '保存修改'
+  return '创建计划'
+})
 
 const pageStyleVars = computed(() => {
   const palette = currentPalette.value
   const isDark = uiTheme.value === 'dark'
-
   const common = {
     '--banner-start': palette.bannerStart,
     '--banner-end': palette.bannerEnd,
@@ -342,6 +477,8 @@ const planForm = reactive({
 })
 
 onMounted(async () => {
+  syncResponsiveState()
+  window.addEventListener('resize', syncResponsiveState)
   const studentIdFromQuery = Number(route.query.studentId)
   if (!Number.isNaN(studentIdFromQuery) && studentIdFromQuery > 0) {
     filterStudent.value = studentIdFromQuery
@@ -349,24 +486,25 @@ onMounted(async () => {
   await reloadData()
 })
 
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', syncResponsiveState)
+})
+
 const safeParseWeeklySchedule = (weeklySchedule) => {
-  if (!weeklySchedule) {
-    return ''
-  }
-  if (typeof weeklySchedule !== 'string') {
-    return String(weeklySchedule)
-  }
+  if (!weeklySchedule) return ''
+  if (typeof weeklySchedule !== 'string') return String(weeklySchedule)
   try {
     const json = JSON.parse(weeklySchedule)
-    if (typeof json === 'string') {
-      return json
-    }
-    if (Array.isArray(json)) {
-      return json.join('；')
-    }
+    if (typeof json === 'string') return json
+    if (Array.isArray(json)) return json.join('；')
     if (json && typeof json === 'object') {
-      return Object.entries(json)
-        .map(([day, items]) => `${day}: ${Array.isArray(items) ? items.join('、') : items}`)
+      const sortedEntries = DAY_ORDER
+        .filter((day) => json[day] != null)
+        .map((day) => [day, json[day]])
+      const extraEntries = Object.entries(json).filter(([day]) => !DAY_ORDER.includes(day))
+
+      return [...sortedEntries, ...extraEntries]
+        .map(([day, items]) => `${DAY_LABELS[day] || day}：${Array.isArray(items) ? items.join('、') : items}`)
         .join('；')
     }
     return weeklySchedule
@@ -418,7 +556,6 @@ const reloadData = async () => {
 
 const applyFilters = () => {
   let filtered = [...allPlans.value]
-
   if (filterStudent.value) {
     filtered = filtered.filter((plan) => String(plan.studentId) === String(filterStudent.value))
   }
@@ -428,7 +565,6 @@ const applyFilters = () => {
   if (filterStatus.value) {
     filtered = filtered.filter((plan) => plan.status === filterStatus.value)
   }
-
   plansList.value = filtered
 }
 
@@ -470,7 +606,15 @@ const getProgressColor = (percentage, goalType) => {
   return palette.progressWeak
 }
 
+const syncResponsiveState = () => {
+  if (typeof window === 'undefined') return
+  isMobileLayout.value = window.innerWidth <= 768
+  isCompactActions.value = window.innerWidth <= 1480
+}
+
 const resetPlanForm = () => {
+  dialogMode.value = 'create'
+  copySourceText.value = ''
   Object.assign(planForm, {
     planId: null,
     studentId: '',
@@ -485,6 +629,7 @@ const resetPlanForm = () => {
 
 const showCreateDialog = () => {
   isEdit.value = false
+  dialogMode.value = 'create'
   dialogTitle.value = '创建训练计划'
   resetPlanForm()
   if (filterStudent.value) {
@@ -500,6 +645,8 @@ const viewPlan = (row) => {
 
 const editPlan = (row) => {
   isEdit.value = true
+  dialogMode.value = 'edit'
+  copySourceText.value = ''
   dialogTitle.value = '编辑训练计划'
   Object.assign(planForm, {
     planId: row.id,
@@ -516,18 +663,38 @@ const editPlan = (row) => {
 
 const copyPlan = (row) => {
   isEdit.value = false
+  dialogMode.value = 'copy'
   dialogTitle.value = '复制训练计划'
+  copySourceText.value = `${row.planName} / ${row.studentName}`
   Object.assign(planForm, {
     planId: null,
     studentId: row.studentId,
     planName: `${row.planName}（副本）`,
     goalType: row.goalType,
     targetValue: row.targetValue,
-    dateRange: [],
+    dateRange: [row.startDate, row.endDate],
     weeklyScheduleText: row.weeklyScheduleText || '',
     description: row.description || ''
   })
   dialogVisible.value = true
+}
+
+const handleRowAction = (row, command) => {
+  if (command === 'view') {
+    viewPlan(row)
+    return
+  }
+  if (command === 'edit') {
+    editPlan(row)
+    return
+  }
+  if (command === 'copy') {
+    copyPlan(row)
+    return
+  }
+  if (command === 'delete') {
+    deletePlan(row)
+  }
 }
 
 const validatePlanForm = () => {
@@ -535,7 +702,7 @@ const validatePlanForm = () => {
     ElMessage.warning('请选择学员')
     return false
   }
-  if (!planForm.planName) {
+  if (!planForm.planName?.trim()) {
     ElMessage.warning('请输入计划名称')
     return false
   }
@@ -547,36 +714,27 @@ const validatePlanForm = () => {
 }
 
 const savePlan = async () => {
-  if (!validatePlanForm()) {
-    return
-  }
+  if (!validatePlanForm()) return
 
   saving.value = true
   try {
     const payload = {
       studentId: Number(planForm.studentId),
-      planName: planForm.planName,
+      planName: planForm.planName.trim(),
       goalType: planForm.goalType,
       targetValue: Number(planForm.targetValue),
       startDate: planForm.dateRange[0],
       endDate: planForm.dateRange[1],
-      weeklySchedule: planForm.weeklyScheduleText || null,
-      description: planForm.description || null
+      weeklySchedule: planForm.weeklyScheduleText?.trim() || null,
+      description: planForm.description?.trim() || null
     }
 
     if (isEdit.value) {
-      await updateTrainingPlan(planForm.planId, {
-        planName: payload.planName,
-        goalType: payload.goalType,
-        targetValue: payload.targetValue,
-        endDate: payload.endDate,
-        weeklySchedule: payload.weeklySchedule,
-        description: payload.description
-      })
+      await updateTrainingPlan(planForm.planId, payload)
       ElMessage.success('计划更新成功')
     } else {
       await createTrainingPlan(payload)
-      ElMessage.success('计划创建成功')
+      ElMessage.success(dialogTitle.value.includes('复制') ? '计划复制成功' : '计划创建成功')
     }
 
     dialogVisible.value = false
@@ -664,6 +822,10 @@ const deletePlan = async (row) => {
   gap: 8px;
 }
 
+.filter-row {
+  row-gap: 12px;
+}
+
 .plan-name-cell {
   display: flex;
   flex-direction: column;
@@ -692,6 +854,292 @@ const deletePlan = async (row) => {
   line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.dialog-mode-banner {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid #dbe7ff;
+  background: #f7faff;
+}
+
+.dialog-mode-banner.mode-copy {
+  border-color: #cfe0ff;
+  background: #eef5ff;
+}
+
+.dialog-mode-banner.mode-edit {
+  border-color: #ffe1b3;
+  background: #fff7ea;
+}
+
+.dialog-mode-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.dialog-mode-desc,
+.dialog-mode-source {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-sub);
+}
+
+.action-btn {
+  min-width: 64px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.action-btn span {
+  line-height: 1;
+}
+
+.action-group-desktop {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.action-group-mobile {
+  display: flex;
+  justify-content: center;
+}
+
+.mobile-plan-list {
+  margin-bottom: 16px;
+}
+
+.mobile-plan-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.mobile-plan-card {
+  border-radius: 14px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  box-shadow: 0 6px 18px var(--card-shadow);
+}
+
+.mobile-plan-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.mobile-plan-name {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.mobile-plan-student {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--text-sub);
+}
+
+.mobile-plan-meta {
+  margin-top: 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.mobile-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.meta-label {
+  font-size: 12px;
+  color: var(--text-sub);
+}
+
+.meta-value {
+  font-size: 14px;
+  color: var(--text-main);
+}
+
+.mobile-progress {
+  margin-top: 14px;
+}
+
+.mobile-progress-head {
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text-sub);
+}
+
+.mobile-progress-head strong {
+  color: var(--text-main);
+  font-size: 14px;
+}
+
+.mobile-plan-actions {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mobile-action-btn {
+  width: 100%;
+  margin-left: 0 !important;
+}
+
+.compact-menu-btn {
+  min-width: 72px;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  color: var(--text-main);
+  background: var(--card-bg);
+}
+
+.compact-menu-btn span {
+  margin-left: 4px;
+}
+
+.compact-menu-btn:hover,
+.compact-menu-btn:focus {
+  color: var(--accent);
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+}
+
+.action-btn + .action-btn {
+  margin-left: 6px;
+}
+
+.view-btn {
+  color: #409eff;
+  background: rgba(64, 158, 255, 0.08);
+  border-color: rgba(64, 158, 255, 0.18);
+}
+
+.view-btn:hover,
+.view-btn:focus {
+  color: #2f86de;
+  background: rgba(64, 158, 255, 0.14);
+  border-color: rgba(64, 158, 255, 0.28);
+}
+
+.edit-btn {
+  color: #d48806;
+  background: rgba(230, 162, 60, 0.1);
+  border-color: rgba(230, 162, 60, 0.2);
+}
+
+.edit-btn:hover,
+.edit-btn:focus {
+  color: #b26a00;
+  background: rgba(230, 162, 60, 0.16);
+  border-color: rgba(230, 162, 60, 0.3);
+}
+
+.copy-btn {
+  color: #5668f5;
+  background: rgba(111, 99, 255, 0.1);
+  border-color: rgba(111, 99, 255, 0.2);
+}
+
+.copy-btn:hover,
+.copy-btn:focus {
+  color: #4354d6;
+  background: rgba(111, 99, 255, 0.16);
+  border-color: rgba(111, 99, 255, 0.3);
+}
+
+.delete-btn {
+  color: #f56c6c;
+  background: rgba(245, 108, 108, 0.1);
+  border-color: rgba(245, 108, 108, 0.2);
+}
+
+.delete-btn:hover,
+.delete-btn:focus {
+  color: #df5a5a;
+  background: rgba(245, 108, 108, 0.16);
+  border-color: rgba(245, 108, 108, 0.3);
+}
+
+.theme-dark .action-btn {
+  background-clip: padding-box;
+}
+
+.theme-dark .compact-menu-btn {
+  border-color: #31476f;
+  background: #17233e;
+}
+
+@media (max-width: 768px) {
+  .plans-page {
+    padding: 0 0 8px;
+  }
+
+  .gradient-header {
+    padding: 16px 16px 18px;
+  }
+
+  .page-header {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .plans-page h2 {
+    font-size: 26px;
+  }
+
+  .header-tools {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .filter-actions {
+    justify-content: stretch;
+    flex-wrap: wrap;
+  }
+
+  .filter-actions .el-button {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+  }
+}
+
+.theme-dark .view-btn {
+  background: rgba(64, 158, 255, 0.16);
+  border-color: rgba(64, 158, 255, 0.3);
+}
+
+.theme-dark .edit-btn {
+  background: rgba(230, 162, 60, 0.18);
+  border-color: rgba(230, 162, 60, 0.3);
+}
+
+.theme-dark .copy-btn {
+  background: rgba(111, 99, 255, 0.2);
+  border-color: rgba(111, 99, 255, 0.32);
+}
+
+.theme-dark .delete-btn {
+  background: rgba(245, 108, 108, 0.18);
+  border-color: rgba(245, 108, 108, 0.3);
 }
 
 :deep(.el-table__header th) {

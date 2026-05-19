@@ -1,93 +1,55 @@
 <template>
   <div class="mobile-dashboard">
-    <!-- 顶部状态栏 -->
     <div class="status-bar">
       <span class="time">{{ currentTime }}</span>
       <div class="status-icons">
-        <span>📶</span>
-        <span>🔋</span>
+        <span>5G</span>
+        <span>100%</span>
       </div>
     </div>
 
-    <!-- 用户头部 -->
     <div class="user-header">
       <div class="user-avatar">
-        <el-avatar :size="60" src="https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png" />
+        <el-avatar :size="60">{{ userName.slice(0, 1) }}</el-avatar>
       </div>
       <div class="user-info">
         <div class="user-name">{{ userName }}</div>
         <div class="user-goal">
-          <el-tag size="small" :type="goalType">{{ fitnessGoal }}</el-tag>
+          <el-tag size="small" :type="goalTagType">{{ fitnessGoal }}</el-tag>
         </div>
       </div>
       <div class="notification-icon">
-        <el-badge :value="3" :max="9">
+        <el-badge :value="0" :max="9">
           <el-icon size="24"><Bell /></el-icon>
         </el-badge>
       </div>
     </div>
 
-    <!-- 核心数据卡片 -->
     <div class="stats-cards">
-      <div class="stat-card weight">
-        <div class="stat-icon">⚖️</div>
+      <div class="stat-card">
+        <div class="stat-icon">体</div>
         <div class="stat-value">{{ stats.weight }}<span class="unit">kg</span></div>
-        <div class="stat-label">体重</div>
+        <div class="stat-label">当前体重</div>
         <div class="stat-change" :class="stats.weightChange < 0 ? 'down' : 'up'">
-          {{ stats.weightChange > 0 ? '↑' : '↓' }}{{ Math.abs(stats.weightChange) }}kg
+          {{ stats.weightChange > 0 ? '+' : '' }}{{ stats.weightChange }}kg
         </div>
       </div>
-      <div class="stat-card fat">
-        <div class="stat-icon">📊</div>
+      <div class="stat-card">
+        <div class="stat-icon">脂</div>
         <div class="stat-value">{{ stats.bodyFat }}<span class="unit">%</span></div>
         <div class="stat-label">体脂率</div>
         <div class="stat-change" :class="stats.bodyFatChange < 0 ? 'down' : 'up'">
-          {{ stats.bodyFatChange > 0 ? '↑' : '↓' }}{{ Math.abs(stats.bodyFatChange) }}%
+          {{ stats.bodyFatChange > 0 ? '+' : '' }}{{ stats.bodyFatChange }}%
         </div>
       </div>
-      <div class="stat-card bmi">
-        <div class="stat-icon">💪</div>
+      <div class="stat-card">
+        <div class="stat-icon">BMI</div>
         <div class="stat-value">{{ stats.bmi }}</div>
-        <div class="stat-label">BMI</div>
-        <div class="stat-change normal">{{ getBmiStatus(stats.bmi) }}</div>
+        <div class="stat-label">身体状态</div>
+        <div class="stat-change normal">{{ getBmiText(stats.bmi) }}</div>
       </div>
     </div>
 
-    <!-- 今日目标进度 -->
-    <div class="section">
-      <div class="section-header">
-        <span class="section-title">今日目标</span>
-        <span class="section-more">查看详情 ></span>
-      </div>
-      <div class="goal-progress">
-        <div class="goal-item">
-          <div class="goal-icon">🏃</div>
-          <div class="goal-info">
-            <div class="goal-name">运动时长</div>
-            <el-progress :percentage="60" :stroke-width="8" color="#409eff" />
-          </div>
-          <div class="goal-value">36/60分钟</div>
-        </div>
-        <div class="goal-item">
-          <div class="goal-icon">🔥</div>
-          <div class="goal-info">
-            <div class="goal-name">消耗热量</div>
-            <el-progress :percentage="75" :stroke-width="8" color="#f56c6c" />
-          </div>
-          <div class="goal-value">375/500卡</div>
-        </div>
-        <div class="goal-item">
-          <div class="goal-icon">👣</div>
-          <div class="goal-info">
-            <div class="goal-name">步数</div>
-            <el-progress :percentage="85" :stroke-width="8" color="#67c23a" />
-          </div>
-          <div class="goal-value">8500/10000</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 本周运动统计 -->
     <div class="section">
       <div class="section-header">
         <span class="section-title">本周运动</span>
@@ -99,20 +61,19 @@
         </div>
         <div class="week-stat-item">
           <div class="week-stat-value">{{ weekStats.totalDuration }}</div>
-          <div class="week-stat-label">总时长(分)</div>
+          <div class="week-stat-label">总时长(分钟)</div>
         </div>
         <div class="week-stat-item">
           <div class="week-stat-value">{{ weekStats.totalCalories }}</div>
-          <div class="week-stat-label">消耗(卡)</div>
+          <div class="week-stat-label">消耗(kcal)</div>
         </div>
       </div>
       <div class="week-chart" ref="weekChartRef"></div>
     </div>
 
-    <!-- 高峰期预警 -->
     <div class="section warning-section">
       <div class="section-header">
-        <span class="section-title">🚨 健身房状态</span>
+        <span class="section-title">健身房状态</span>
       </div>
       <div class="gym-status" :class="peakWarning.level">
         <div class="status-indicator"></div>
@@ -127,32 +88,28 @@
       </div>
     </div>
 
-    <!-- 训练计划 -->
     <div class="section" v-if="trainingPlan">
       <div class="section-header">
-        <span class="section-title">📋 我的训练计划</span>
+        <span class="section-title">我的训练计划</span>
       </div>
       <div class="plan-card">
         <div class="plan-name">{{ trainingPlan.planName }}</div>
-        <div class="plan-progress">
-          <el-progress :percentage="trainingPlan.completionRate" :stroke-width="10" />
+        <div class="plan-meta">
+          <el-tag size="small" effect="light" :type="goalTagType">{{ formatGoalType(trainingPlan.goalType) }}</el-tag>
+          <span>{{ Math.round(trainingPlan.completionRate || 0) }}%</span>
         </div>
-        <div class="plan-schedule">
-          <div class="schedule-title">今日安排</div>
-          <div class="schedule-items">
-            <div class="schedule-item" v-for="(item, index) in todaySchedule" :key="index">
-              <el-icon><Check /></el-icon>
-              <span>{{ item }}</span>
-            </div>
-            <div class="schedule-item empty" v-if="todaySchedule.length === 0">
-              今日休息
-            </div>
+        <el-progress :percentage="Math.round(trainingPlan.completionRate || 0)" :stroke-width="10" />
+        <div class="schedule-title">今日安排</div>
+        <div class="schedule-items" v-if="todaySchedule.length">
+          <div class="schedule-item" v-for="(item, index) in todaySchedule" :key="`${item}-${index}`">
+            <el-icon><Check /></el-icon>
+            <span>{{ item }}</span>
           </div>
         </div>
+        <div class="schedule-item empty" v-else>今日休息</div>
       </div>
     </div>
 
-    <!-- 底部导航 -->
     <div class="bottom-nav">
       <div class="nav-item active">
         <el-icon size="24"><HomeFilled /></el-icon>
@@ -160,9 +117,9 @@
       </div>
       <div class="nav-item" @click="$router.push('/student/calendar')">
         <el-icon size="24"><Calendar /></el-icon>
-        <span>记录</span>
+        <span>日历</span>
       </div>
-      <div class="nav-item add-btn" @click="$router.push('/student/calendar')">
+      <div class="nav-item add-btn" @click="$router.push('/student/checkin')">
         <el-icon size="28"><Plus /></el-icon>
       </div>
       <div class="nav-item" @click="$router.push('/student/achievements')">
@@ -178,134 +135,230 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import * as echarts from 'echarts'
-import { Bell, HomeFilled, Calendar, Plus, Trophy, User, Check } from '@element-plus/icons-vue'
+import { Bell, Calendar, Check, HomeFilled, Plus, Trophy, User } from '@element-plus/icons-vue'
 import { getLatestBodyMetric, getBodyMetricHistory } from '@/api/bodyMetric'
-import { getExerciseStatistics } from '@/api/exercise'
-import { getMyTrainingPlan } from '@/api/trainingPlan'
+import { getExerciseStatistics, getUserExerciseRecords } from '@/api/exercise'
 import { getPeakHourWarning } from '@/api/analytics'
+import { getMyTrainingPlan } from '@/api/trainingPlan'
 import { initChart } from '@/utils/chartTheme'
 
 const weekChartRef = ref(null)
-const currentTime = ref(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
-const userName = ref(localStorage.getItem('realName') || '健身达人')
-const fitnessGoal = ref('减重')
-const goalType = ref('danger')
+const currentTime = ref(formatClock(new Date()))
+const userName = ref(localStorage.getItem('realName') || '学员')
+const fitnessGoal = ref('未设置目标')
+const goalTagType = ref('info')
+const trainingPlan = ref(null)
+const weekChart = ref(null)
 
 const stats = reactive({
-  weight: 70,
-  bodyFat: 20,
-  bmi: 22,
-  weightChange: -0.5,
-  bodyFatChange: -0.3
+  weight: 0,
+  bodyFat: 0,
+  bmi: 0,
+  weightChange: 0,
+  bodyFatChange: 0
 })
 
 const weekStats = reactive({
-  exerciseCount: 5,
-  totalDuration: 180,
-  totalCalories: 1500
+  exerciseCount: 0,
+  totalDuration: 0,
+  totalCalories: 0
 })
 
 const peakWarning = reactive({
   level: 'normal',
   currentStatus: '当前空闲',
-  currentCount: 15,
-  peakHours: '18:00-20:00'
+  currentCount: 0,
+  peakHours: '--:--'
 })
 
-const trainingPlan = ref(null)
-
 const todaySchedule = computed(() => {
-  if (!trainingPlan.value?.weeklySchedule) return []
+  const raw = trainingPlan.value?.weeklySchedule
+  if (!raw) return []
   try {
-    const schedule = typeof trainingPlan.value.weeklySchedule === 'string' 
-      ? JSON.parse(trainingPlan.value.weeklySchedule) 
-      : trainingPlan.value.weeklySchedule
+    const schedule = typeof raw === 'string' ? JSON.parse(raw) : raw
     const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
-    const today = days[new Date().getDay()]
-    return schedule[today] || []
+    const todayKey = days[new Date().getDay()]
+    const value = schedule?.[todayKey]
+    if (Array.isArray(value)) return value
+    if (typeof value === 'string') return value.split(/[；;\n]/).map((item) => item.trim()).filter(Boolean)
+    return []
   } catch {
     return []
   }
 })
 
-const getBmiStatus = (bmi) => {
+let timerId = null
+
+function formatClock(date) {
+  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+function getBmiText(bmi) {
   if (bmi < 18.5) return '偏瘦'
   if (bmi < 24) return '正常'
   if (bmi < 28) return '偏胖'
   return '肥胖'
 }
 
-const loadData = async () => {
-  try {
-    const latestMetric = await getLatestBodyMetric()
-    if (latestMetric) {
-      stats.weight = latestMetric.weightKg || 70
-      stats.bodyFat = latestMetric.bodyFatPercentage || 20
-      stats.bmi = latestMetric.bmi || 22
-    }
-  } catch (e) {}
-
-  try {
-    const exerciseStats = await getExerciseStatistics()
-    if (exerciseStats) {
-      weekStats.exerciseCount = exerciseStats.weekExerciseCount || 5
-      weekStats.totalDuration = exerciseStats.weekTotalDuration || 180
-      weekStats.totalCalories = exerciseStats.weekTotalCalories || 1500
-    }
-  } catch (e) {}
-
-  try {
-    const plan = await getMyTrainingPlan()
-    trainingPlan.value = plan
-  } catch (e) {}
-
-  try {
-    const warning = await getPeakHourWarning()
-    if (warning) {
-      Object.assign(peakWarning, warning)
-    }
-  } catch (e) {}
+function formatGoalType(goalType) {
+  const map = {
+    WEIGHT_LOSS: '减重',
+    FAT_LOSS: '减脂',
+    MUSCLE_GAIN: '增肌'
+  }
+  return map[`${goalType || ''}`.trim().toUpperCase()] || '未设置目标'
 }
 
-const initWeekChart = () => {
+function resolveGoalTagType(goalType) {
+  const map = {
+    WEIGHT_LOSS: 'danger',
+    FAT_LOSS: 'warning',
+    MUSCLE_GAIN: 'success'
+  }
+  return map[`${goalType || ''}`.trim().toUpperCase()] || 'info'
+}
+
+function getCurrentWeekRange() {
+  const now = new Date()
+  const weekday = now.getDay()
+  const diff = weekday === 0 ? 6 : weekday - 1
+
+  const start = new Date(now)
+  start.setDate(now.getDate() - diff)
+  start.setHours(0, 0, 0, 0)
+
+  const end = new Date(start)
+  end.setDate(start.getDate() + 6)
+  end.setHours(23, 59, 59, 999)
+
+  return { start, end }
+}
+
+function formatDateParam(date) {
+  return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, '0')}-${`${date.getDate()}`.padStart(2, '0')}`
+}
+
+function initWeekChartWith(records) {
   if (!weekChartRef.value) return
-  const chart = initChart(weekChartRef.value)
-  chart.setOption({
-    grid: { left: 30, right: 10, top: 10, bottom: 20 },
+  if (!weekChart.value) weekChart.value = initChart(weekChartRef.value)
+
+  const labels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+  const values = Array(7).fill(0)
+  ;(records || []).forEach((record) => {
+    if (!record?.exerciseDate) return
+    const date = new Date(record.exerciseDate)
+    if (Number.isNaN(date.getTime())) return
+    const day = date.getDay()
+    const index = day === 0 ? 6 : day - 1
+    values[index] += Number(record.durationMinutes || 0)
+  })
+
+  weekChart.value.setOption({
+    grid: { left: 20, right: 10, top: 10, bottom: 20 },
     xAxis: {
       type: 'category',
-      data: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
+      data: labels,
       axisLine: { show: false },
       axisTick: { show: false },
       axisLabel: { fontSize: 10, color: '#999' }
     },
-    yAxis: {
-      type: 'value',
-      show: false
-    },
+    yAxis: { type: 'value', show: false },
     series: [{
       type: 'bar',
-      data: [30, 45, 0, 60, 45, 0, 0],
+      data: values,
+      barWidth: 20,
       itemStyle: {
         borderRadius: [4, 4, 0, 0],
         color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
           { offset: 0, color: '#409eff' },
           { offset: 1, color: '#66b1ff' }
         ])
-      },
-      barWidth: 20
+      }
     }]
   })
 }
 
+async function loadData() {
+  const { start, end } = getCurrentWeekRange()
+  const weekParams = {
+    startDate: formatDateParam(start),
+    endDate: formatDateParam(end)
+  }
+
+  try {
+    const latestMetric = await getLatestBodyMetric()
+    if (latestMetric) {
+      stats.weight = Number(latestMetric.weightKg || 0)
+      stats.bodyFat = Number(latestMetric.bodyFatPercentage || 0)
+      stats.bmi = Number(latestMetric.bmi || 0)
+    }
+  } catch {}
+
+  try {
+    const history = await getBodyMetricHistory()
+    const sorted = (Array.isArray(history) ? history : [])
+      .filter((item) => item && item.measurementDate && item.weightKg != null)
+      .sort((left, right) => new Date(left.measurementDate) - new Date(right.measurementDate))
+    if (sorted.length >= 2) {
+      stats.weightChange = Number((Number(sorted.at(-1).weightKg) - Number(sorted.at(-2).weightKg)).toFixed(1))
+      const latestFat = Number(sorted.at(-1).bodyFatPercentage)
+      const previousFat = Number(sorted.at(-2).bodyFatPercentage)
+      if (Number.isFinite(latestFat) && Number.isFinite(previousFat)) {
+        stats.bodyFatChange = Number((latestFat - previousFat).toFixed(1))
+      }
+    }
+  } catch {}
+
+  try {
+    const exerciseStats = await getExerciseStatistics(weekParams)
+    weekStats.exerciseCount = Number(exerciseStats?.totalRecords || 0)
+    weekStats.totalDuration = Number(exerciseStats?.totalDurationMinutes || 0)
+    weekStats.totalCalories = Math.round(Number(exerciseStats?.totalCaloriesBurned || 0))
+  } catch {}
+
+  try {
+    const records = await getUserExerciseRecords(weekParams)
+    initWeekChartWith(records)
+  } catch {
+    initWeekChartWith([])
+  }
+
+  try {
+    const plan = await getMyTrainingPlan()
+    trainingPlan.value = plan
+    fitnessGoal.value = formatGoalType(plan?.goalType)
+    goalTagType.value = resolveGoalTagType(plan?.goalType)
+  } catch {
+    trainingPlan.value = null
+    fitnessGoal.value = '未设置目标'
+    goalTagType.value = 'info'
+  }
+
+  try {
+    const warning = await getPeakHourWarning()
+    const peakHour = Number(warning?.peakHour)
+    peakWarning.level = warning?.isPeakHour ? 'crowded' : 'normal'
+    peakWarning.currentStatus = warning?.isPeakHour ? '当前高峰' : '当前空闲'
+    peakWarning.currentCount = Number(warning?.currentCount || 0)
+    peakWarning.peakHours = Number.isFinite(peakHour)
+      ? `${String(peakHour).padStart(2, '0')}:00-${String((peakHour + 1) % 24).padStart(2, '0')}:59`
+      : '--:--'
+  } catch {}
+}
+
 onMounted(() => {
   loadData()
-  setTimeout(initWeekChart, 100)
-  setInterval(() => {
-    currentTime.value = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  timerId = setInterval(() => {
+    currentTime.value = formatClock(new Date())
   }, 1000)
+})
+
+onUnmounted(() => {
+  if (timerId) clearInterval(timerId)
+  weekChart.value?.dispose()
+  weekChart.value = null
 })
 </script>
 
@@ -354,10 +407,6 @@ onMounted(() => {
   margin-top: 5px;
 }
 
-.notification-icon {
-  cursor: pointer;
-}
-
 .stats-cards {
   display: flex;
   gap: 10px;
@@ -371,12 +420,13 @@ onMounted(() => {
   border-radius: 16px;
   padding: 15px 10px;
   text-align: center;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .stat-icon {
-  font-size: 24px;
+  font-size: 18px;
   margin-bottom: 8px;
+  color: #409eff;
 }
 
 .stat-value {
@@ -423,7 +473,7 @@ onMounted(() => {
   background: white;
   border-radius: 16px;
   padding: 15px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .section-header {
@@ -437,43 +487,6 @@ onMounted(() => {
   font-size: 16px;
   font-weight: bold;
   color: #303133;
-}
-
-.section-more {
-  font-size: 12px;
-  color: #909399;
-}
-
-.goal-item {
-  display: flex;
-  align-items: center;
-  padding: 10px 0;
-  border-bottom: 1px solid #f5f5f5;
-}
-
-.goal-item:last-child {
-  border-bottom: none;
-}
-
-.goal-icon {
-  font-size: 24px;
-  margin-right: 12px;
-}
-
-.goal-info {
-  flex: 1;
-}
-
-.goal-name {
-  font-size: 14px;
-  color: #606266;
-  margin-bottom: 6px;
-}
-
-.goal-value {
-  font-size: 12px;
-  color: #909399;
-  white-space: nowrap;
 }
 
 .week-stats {
@@ -511,15 +524,7 @@ onMounted(() => {
   align-items: center;
   padding: 10px;
   border-radius: 12px;
-  background: #f5f5f5;
-}
-
-.gym-status.normal {
   background: #f0f9eb;
-}
-
-.gym-status.busy {
-  background: #fdf6ec;
 }
 
 .gym-status.crowded {
@@ -532,20 +537,10 @@ onMounted(() => {
   border-radius: 50%;
   background: #67c23a;
   margin-right: 12px;
-  animation: pulse 2s infinite;
-}
-
-.gym-status.busy .status-indicator {
-  background: #e6a23c;
 }
 
 .gym-status.crowded .status-indicator {
   background: #f56c6c;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
 }
 
 .status-info {
@@ -579,30 +574,30 @@ onMounted(() => {
 }
 
 .plan-card {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border-radius: 12px;
   padding: 15px;
-  color: white;
+  background: linear-gradient(135deg, #eef4ff 0%, #ffffff 100%);
+  border: 1px solid #dfe9ff;
 }
 
 .plan-name {
   font-size: 18px;
   font-weight: bold;
-  margin-bottom: 10px;
+  color: #303133;
 }
 
-.plan-progress {
-  margin-bottom: 15px;
-}
-
-.plan-progress :deep(.el-progress__text) {
-  color: white;
+.plan-meta {
+  margin: 8px 0 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #606266;
 }
 
 .schedule-title {
+  margin: 12px 0 8px;
   font-size: 14px;
-  margin-bottom: 10px;
-  opacity: 0.9;
+  color: #606266;
 }
 
 .schedule-item {
@@ -611,10 +606,11 @@ onMounted(() => {
   gap: 8px;
   padding: 6px 0;
   font-size: 13px;
+  color: #303133;
 }
 
 .schedule-item.empty {
-  opacity: 0.7;
+  color: #909399;
 }
 
 .bottom-nav {
@@ -629,7 +625,7 @@ onMounted(() => {
   align-items: center;
   background: white;
   padding: 10px 0 25px;
-  box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
   border-radius: 20px 20px 0 0;
   z-index: 100;
 }

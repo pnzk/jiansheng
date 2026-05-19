@@ -36,6 +36,37 @@ public class ExerciseReferenceService {
         
         return exerciseReferenceMapper.selectPage(pageRequest, wrapper);
     }
+
+    public Page<ExerciseReference> getExercisesPage(int page, int size, String keyword, String exerciseType, String bodyPart, String level) {
+        Page<ExerciseReference> pageRequest = new Page<>(page, size);
+        QueryWrapper<ExerciseReference> wrapper = new QueryWrapper<>();
+
+        if (keyword != null && !keyword.trim().isEmpty()) {
+            String normalizedKeyword = keyword.trim();
+            wrapper.and(condition -> condition
+                    .like("exercise_name_en", normalizedKeyword)
+                    .or()
+                    .like("body_part", normalizedKeyword)
+                    .or()
+                    .like("equipment", normalizedKeyword)
+                    .or()
+                    .like("exercise_type", normalizedKeyword)
+                    .or()
+                    .like("description", normalizedKeyword));
+        }
+        if (exerciseType != null && !exerciseType.isEmpty()) {
+            wrapper.eq("exercise_type", exerciseType);
+        }
+        if (bodyPart != null && !bodyPart.isEmpty()) {
+            wrapper.eq("body_part", bodyPart);
+        }
+        if (level != null && !level.isEmpty()) {
+            wrapper.eq("level", level);
+        }
+
+        wrapper.orderByAsc("exercise_name_en");
+        return exerciseReferenceMapper.selectPage(pageRequest, wrapper);
+    }
     
     public ExerciseReference getById(Long id) {
         return exerciseReferenceMapper.selectById(id);
@@ -43,7 +74,17 @@ public class ExerciseReferenceService {
     
     public List<ExerciseReference> searchByName(String keyword) {
         QueryWrapper<ExerciseReference> wrapper = new QueryWrapper<>();
-        wrapper.like("exercise_name_en", keyword);
+        wrapper.and(condition -> condition
+                .like("exercise_name_en", keyword)
+                .or()
+                .like("body_part", keyword)
+                .or()
+                .like("equipment", keyword)
+                .or()
+                .like("exercise_type", keyword)
+                .or()
+                .like("description", keyword));
+        wrapper.orderByAsc("exercise_name_en");
         return exerciseReferenceMapper.selectList(wrapper);
     }
     

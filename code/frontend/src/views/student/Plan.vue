@@ -3,7 +3,7 @@
     <div class="page-banner">
       <div>
         <h2>我的训练计划</h2>
-        <p class="banner-subtitle">按目标稳步推进，实时查看训练进度与安排</p>
+        <p class="banner-subtitle">按目标稳步推进，实时查看训练进度与安排。</p>
       </div>
       <div class="banner-right">
         <el-switch
@@ -13,13 +13,7 @@
           inactive-text="浅色"
           class="theme-switch"
         />
-        <el-tag
-          v-if="plan"
-          :type="getStatusTagType(plan.status)"
-          effect="dark"
-          round
-          class="status-tag"
-        >
+        <el-tag v-if="plan" :type="getStatusTagType(plan.status)" effect="dark" round class="status-tag">
           {{ getStatusText(plan.status) }}
         </el-tag>
       </div>
@@ -94,7 +88,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import * as echarts from 'echarts'
 import { getMyTrainingPlan } from '@/api/trainingPlan'
 import { initChart } from '@/utils/chartTheme'
 
@@ -134,9 +127,21 @@ const GOAL_PALETTES = {
   }
 }
 
+const DAY_LABELS = {
+  monday: '周一',
+  tuesday: '周二',
+  wednesday: '周三',
+  thursday: '周四',
+  friday: '周五',
+  saturday: '周六',
+  sunday: '周日'
+}
+
+const DAY_ORDER = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+
 const plan = ref(null)
 const chartRef = ref(null)
-const weeklyScheduleText = ref('')
+const weeklyScheduleItems = ref([])
 const chartInstance = ref(null)
 const uiTheme = ref('light')
 
@@ -154,7 +159,6 @@ const currentPalette = computed(() => GOAL_PALETTES[plan.value?.goalType] || GOA
 const pageStyleVars = computed(() => {
   const palette = currentPalette.value
   const isDark = uiTheme.value === 'dark'
-
   const common = {
     '--banner-start': palette.bannerStart,
     '--banner-end': palette.bannerEnd,
@@ -215,20 +219,13 @@ const pageStyleVars = computed(() => {
   }
 })
 
-const weeklyScheduleItems = computed(() => {
-  return weeklyScheduleText.value
-    .split(/[；;\n]/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-})
-
 const getGoalText = (goalType) => {
   const texts = {
     WEIGHT_LOSS: '减重',
     FAT_LOSS: '减脂',
     MUSCLE_GAIN: '增肌'
   }
-  return texts[goalType] || goalType || '未设置'
+  return texts[goalType] || goalType || '未设置目标'
 }
 
 const getStatusText = (status) => {
@@ -257,26 +254,26 @@ const getProgressColor = (percentage) => {
 }
 
 const parseWeeklySchedule = (weeklySchedule) => {
-  if (!weeklySchedule) {
-    return ''
-  }
-  if (typeof weeklySchedule !== 'string') {
-    return String(weeklySchedule)
-  }
+  if (!weeklySchedule) return []
+  if (typeof weeklySchedule !== 'string') return [String(weeklySchedule)]
 
   try {
     const json = JSON.parse(weeklySchedule)
-    if (Array.isArray(json)) {
-      return json.join('；')
-    }
+    if (typeof json === 'string') return json.split(/[；;\n]/).map((item) => item.trim()).filter(Boolean)
+    if (Array.isArray(json)) return json.map((item) => String(item).trim()).filter(Boolean)
     if (json && typeof json === 'object') {
-      return Object.entries(json)
-        .map(([day, items]) => `${day}：${Array.isArray(items) ? items.join('、') : items}`)
-        .join('；')
+      const sortedEntries = DAY_ORDER
+        .filter((day) => json[day] != null)
+        .map((day) => [day, json[day]])
+      const extraEntries = Object.entries(json).filter(([day]) => !DAY_ORDER.includes(day))
+
+      return [...sortedEntries, ...extraEntries]
+        .map(([day, items]) => `${DAY_LABELS[day] || day}：${Array.isArray(items) ? items.join('、') : items}`)
+        .filter(Boolean)
     }
-    return weeklySchedule
+    return [weeklySchedule]
   } catch {
-    return weeklySchedule
+    return weeklySchedule.split(/[；;\n]/).map((item) => item.trim()).filter(Boolean)
   }
 }
 
@@ -286,7 +283,6 @@ const resizeChart = () => {
 
 const renderChart = () => {
   if (!chartRef.value || !plan.value) return
-
   if (!chartInstance.value) {
     chartInstance.value = initChart(chartRef.value)
   }
@@ -304,9 +300,7 @@ const renderChart = () => {
         progress: {
           show: true,
           width: 12,
-          itemStyle: {
-            color: getProgressColor(completionRate.value)
-          }
+          itemStyle: { color: getProgressColor(completionRate.value) }
         },
         axisLine: {
           lineStyle: {
@@ -352,15 +346,15 @@ const loadPlan = async () => {
     const data = await getMyTrainingPlan()
     if (data) {
       plan.value = data
-      weeklyScheduleText.value = parseWeeklySchedule(data.weeklySchedule)
+      weeklyScheduleItems.value = parseWeeklySchedule(data.weeklySchedule)
       setTimeout(renderChart, 120)
     } else {
       plan.value = null
-      weeklyScheduleText.value = ''
+      weeklyScheduleItems.value = []
     }
   } catch (error) {
     plan.value = null
-    weeklyScheduleText.value = ''
+    weeklyScheduleItems.value = []
     const message = String(error?.message || '')
     if (message && !message.includes('暂无')) {
       ElMessage.error(message)

@@ -23,3 +23,7 @@ export const getCoachStudents = () => {
 export const handleCoachTodo = (data) => {
   return request.post('/user/coach/todos/handle', data)
 }
+
+export const getHandledCoachTodos = () => {
+  return request.get('/user/coach/todos/handled')
+}

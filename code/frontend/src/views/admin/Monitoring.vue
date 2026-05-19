@@ -1,20 +1,26 @@
 <template>
   <div class="monitoring-page">
-    <h2>健身房全局监控</h2>
+    <h2>全局监控</h2>
 
     <el-card style="margin-top: 20px">
       <el-form :inline="true">
         <el-form-item label="时段活跃口径">
-          <el-radio-group v-model="hourlyRangeType" @change="onHourlyRangeChange">
-            <el-radio-button value="today">当天</el-radio-button>
-            <el-radio-button value="week">近7天</el-radio-button>
-            <el-radio-button value="month">近30天</el-radio-button>
+          <el-radio-group v-model="hourlyRangeType" @change="loadData">
+            <el-radio-button label="today">当天</el-radio-button>
+            <el-radio-button label="week">近7天</el-radio-button>
+            <el-radio-button label="month">近30天</el-radio-button>
           </el-radio-group>
+        </el-form-item>
+        <el-form-item>
+          <span class="range-tip">
+            当前展示区间：{{ resolvedRange.startDate || '--' }} 至 {{ resolvedRange.endDate || '--' }}
+            <el-tag v-if="resolvedRange.fallbackApplied" size="small" type="warning" effect="plain">已自动回退到最近有数据区间</el-tag>
+          </span>
         </el-form-item>
       </el-form>
     </el-card>
 
-    <el-row :gutter="20" style="margin-top: 20px">
+    <el-row :gutter="20" style="margin-top: 20px" v-loading="loadingStates.summary">
       <el-col :span="6">
         <el-card>
           <div class="stat-card">
@@ -48,7 +54,7 @@
               <el-icon size="30"><Timer /></el-icon>
             </div>
             <div class="stat-content">
-              <div class="stat-value">{{ stats.weekDuration }}</div>
+              <div class="stat-value">{{ stats.totalDuration }}</div>
               <div class="stat-label">累计运动时长(分钟)</div>
             </div>
           </div>
@@ -61,7 +67,7 @@
               <el-icon size="30"><TrendCharts /></el-icon>
             </div>
             <div class="stat-content">
-              <div class="stat-value">{{ stats.weekCalories }}</div>
+              <div class="stat-value">{{ stats.totalCalories }}</div>
               <div class="stat-label">累计消耗卡路里</div>
             </div>
           </div>
@@ -69,7 +75,7 @@
       </el-col>
     </el-row>
 
-    <el-row :gutter="20" style="margin-top: 20px">
+    <el-row :gutter="20" style="margin-top: 20px" v-loading="loadingStates.heatmap">
       <el-col :span="8">
         <el-card class="warning-card">
           <template #header>
@@ -114,7 +120,7 @@
       </el-col>
     </el-row>
 
-    <el-row :gutter="20" style="margin-top: 20px">
+    <el-row :gutter="20" style="margin-top: 20px" v-loading="loadingStates.charts">
       <el-col :span="12">
         <el-card>
           <template #header>
@@ -133,7 +139,7 @@
       </el-col>
     </el-row>
 
-    <el-row :gutter="20" style="margin-top: 20px">
+    <el-row :gutter="20" style="margin-top: 20px" v-loading="loadingStates.charts">
       <el-col :span="12">
         <el-card>
           <template #header>
@@ -152,7 +158,7 @@
       </el-col>
     </el-row>
 
-    <el-card style="margin-top: 20px">
+    <el-card style="margin-top: 20px" v-loading="loadingStates.workload">
       <template #header>
         <span>教练工作量统计</span>
       </template>
@@ -183,6 +189,7 @@ import {
   getEquipmentUsage,
   getExercisePreference,
   getHourlyActivity,
+  getHourlyHeatmap,
   getPeakHourWarning
 } from '@/api/analytics'
 
@@ -195,8 +202,8 @@ const heatmapChartRef = ref(null)
 const stats = reactive({
   totalUsers: 0,
   activeUsers: 0,
-  weekDuration: 0,
-  weekCalories: 0
+  totalDuration: 0,
+  totalCalories: 0
 })
 
 const peakWarning = reactive({
@@ -208,6 +215,12 @@ const peakWarning = reactive({
   threshold: 50
 })
 
+const resolvedRange = reactive({
+  startDate: '',
+  endDate: '',
+  fallbackApplied: false
+})
+
 const coachWorkload = ref([])
 const exercisePreferenceData = ref([])
 const hourlyData = ref([])
@@ -217,18 +230,18 @@ const heatmapData = ref([])
 const heatmapDayLabels = ref([])
 const hourlyRangeType = ref('week')
 const peakHourTitle = ref('高峰期时段分析（近7天）')
-const heatmapTitle = ref('近7日各时段活跃热力图')
+const heatmapTitle = ref('近7天各时段活跃热力图')
 const chartInstances = []
+const loadingStates = reactive({
+  summary: false,
+  heatmap: false,
+  charts: false,
+  workload: false
+})
 
 const hours = Array.from({ length: 24 }, (_, hour) => `${hour}:00`)
-const days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-
 onMounted(async () => {
   await loadData()
-  await nextTick()
-  initCharts()
-  resizeCharts()
-  setTimeout(resizeCharts, 200)
   window.addEventListener('resize', resizeCharts)
 })
 
@@ -238,75 +251,10 @@ onBeforeUnmount(() => {
   chartInstances.length = 0
 })
 
-const loadData = async () => {
-  try {
-    const [dashboardResult, peakResult, equipmentResult, preferenceResult, workloadResult] = await Promise.allSettled([
-      getDashboardStatistics(),
-      getPeakHourWarning(),
-      getEquipmentUsage(),
-      getExercisePreference(),
-      getCoachWorkload()
-    ])
-
-    const dashboardData = dashboardResult.status === 'fulfilled' ? dashboardResult.value : {}
-    const peakData = peakResult.status === 'fulfilled' ? peakResult.value : {}
-    const equipmentData = equipmentResult.status === 'fulfilled' ? equipmentResult.value : {}
-    const preferenceData = preferenceResult.status === 'fulfilled' ? preferenceResult.value : {}
-    const workloadData = workloadResult.status === 'fulfilled' ? workloadResult.value : []
-
-    stats.totalUsers = Number(dashboardData.totalUsers || 0)
-    stats.activeUsers = Number(dashboardData.activeUsers || 0)
-    stats.weekDuration = Number(dashboardData.totalDurationMinutes || dashboardData.totalDuration || 0)
-    stats.weekCalories = Math.round(Number(dashboardData.totalCaloriesBurned || dashboardData.totalCalories || 0))
-
-    peakWarning.currentCount = Number(peakData.currentCount || 0)
-    peakWarning.threshold = Number(peakData.threshold || 50)
-    peakWarning.peakCount = Number(peakData.peakCount || peakData.currentCount || 0)
-
-    const peakHour = Number(peakData.peakHour)
-    if (Number.isFinite(peakHour)) {
-      peakWarning.peakHours = `${peakHour}:00-${peakHour}:59`
-    }
-
-    if (peakData.isPeakHour) {
-      peakWarning.level = 'crowded'
-      peakWarning.statusText = '当前拥挤'
-    } else if ((peakData.currentCount || 0) >= Math.floor((peakData.threshold || 50) * 0.7)) {
-      peakWarning.level = 'busy'
-      peakWarning.statusText = '当前较忙'
-    } else {
-      peakWarning.level = 'normal'
-      peakWarning.statusText = '当前空闲'
-    }
-
-    exercisePreferenceData.value = preferenceData?.preferences || []
-    coachWorkload.value = (workloadData || []).map((item) => ({
-      ...item,
-      avgProgress: Number(item.avgProgress || 0)
-    }))
-
-    equipmentUsageRows.value = Object.entries(equipmentData?.equipmentUsage || {})
-      .map(([name, count]) => ({ name, count: Number(count || 0) }))
-      .sort((left, right) => right.count - left.count)
-
-    userGrowthSeries.value = buildUserGrowthSeries(stats.totalUsers, stats.activeUsers)
-    await loadHourlyDataByRange(hourlyRangeType.value)
-  } catch (error) {
-    ElMessage.error('加载监控数据失败')
-  }
-}
-
-const onHourlyRangeChange = async () => {
-  await loadHourlyDataByRange(hourlyRangeType.value)
-  await nextTick()
-  initPeakHourChart()
-  initHeatmapChart()
-  resizeCharts()
-}
-
-const getHourlyRangeMeta = (rangeType) => {
+const getRangeMeta = (rangeType) => {
   if (rangeType === 'today') {
     return {
+      mode: 'today',
       days: 1,
       peakTitle: '高峰期时段分析（当天）',
       heatmapTitleText: '当天各时段活跃热力图'
@@ -314,16 +262,17 @@ const getHourlyRangeMeta = (rangeType) => {
   }
   if (rangeType === 'month') {
     return {
+      mode: 'month',
       days: 30,
       peakTitle: '高峰期时段分析（近30天）',
       heatmapTitleText: '近30天各时段活跃热力图'
     }
   }
-
   return {
+    mode: 'week',
     days: 7,
     peakTitle: '高峰期时段分析（近7天）',
-    heatmapTitleText: '近7日各时段活跃热力图'
+    heatmapTitleText: '近7天各时段活跃热力图'
   }
 }
 
@@ -341,59 +290,155 @@ const buildDateList = (daysCount) => {
 }
 
 const toHourlySeries = (hourlyDataList) => {
-  const dataMap = new Map(
-    (hourlyDataList || []).map((item) => [Number(item.hour), Number(item.count || 0)])
-  )
+  const map = new Map((hourlyDataList || []).map((item) => [Number(item.hour), Number(item.count || 0)]))
   return Array.from({ length: 24 }, (_, hour) => ({
     hour,
-    count: dataMap.get(hour) || 0
+    count: map.get(hour) || 0
   }))
 }
 
-const loadHourlyDataByRange = async (rangeType) => {
-  const meta = getHourlyRangeMeta(rangeType)
-  const dateList = buildDateList(meta.days)
-  if (!dateList.length) {
-    hourlyData.value = toHourlySeries([])
-    heatmapDayLabels.value = []
-    heatmapData.value = []
-    return
+const resolveEffectiveRange = (...responses) => {
+  const candidates = responses
+    .map((item) => ({
+      startDate: item?.periodStart,
+      endDate: item?.periodEnd,
+      fallbackApplied: Boolean(item?.fallbackApplied)
+    }))
+    .filter((item) => item.startDate && item.endDate)
+
+  if (!candidates.length) {
+    return { startDate: '', endDate: '', fallbackApplied: false }
   }
+
+  return candidates.find((item) => item.fallbackApplied) || candidates[0]
+}
+
+const loadData = async () => {
+  const meta = getRangeMeta(hourlyRangeType.value)
+  const dateList = buildDateList(meta.days)
   const startDate = dateList[0]
   const endDate = dateList[dateList.length - 1]
+  const params = { startDate, endDate }
 
   peakHourTitle.value = meta.peakTitle
   heatmapTitle.value = meta.heatmapTitleText
 
   try {
-    const rangeResult = await getHourlyActivity({ startDate, endDate })
-    hourlyData.value = toHourlySeries(rangeResult?.hourlyData || [])
-  } catch (error) {
-    hourlyData.value = toHourlySeries([])
-  }
+    loadingStates.summary = true
+    loadingStates.heatmap = true
+    loadingStates.charts = true
+    loadingStates.workload = true
+    const [
+      dashboardResult,
+      peakResult,
+      equipmentResult,
+      preferenceResult,
+      workloadResult,
+      hourlyResult
+    ] = await Promise.allSettled([
+      getDashboardStatistics(params),
+      getPeakHourWarning(params),
+      getEquipmentUsage(params),
+      getExercisePreference(params),
+      getCoachWorkload(),
+      getHourlyActivity(params)
+    ])
 
-  const records = await Promise.all(dateList.map(async (dateText) => {
-    try {
-      const result = await getHourlyActivity({ startDate: dateText, endDate: dateText })
-      return { dateText, result }
-    } catch (error) {
-      return { dateText, result: null }
-    }
-  }))
+    const dashboardData = dashboardResult.status === 'fulfilled' ? dashboardResult.value : {}
+    const peakData = peakResult.status === 'fulfilled' ? peakResult.value : {}
+    const equipmentData = equipmentResult.status === 'fulfilled' ? equipmentResult.value : {}
+    const preferenceData = preferenceResult.status === 'fulfilled' ? preferenceResult.value : {}
+    const workloadData = workloadResult.status === 'fulfilled' ? workloadResult.value : []
+    const hourlyResultData = hourlyResult.status === 'fulfilled' ? hourlyResult.value : {}
 
-  heatmapDayLabels.value = records.map((record) => {
-    const date = new Date(record.dateText)
-    const weekday = days[date.getDay() === 0 ? 6 : date.getDay() - 1]
-    return `${record.dateText.slice(5)} ${weekday}`
-  })
-
-  heatmapData.value = records.flatMap((record, dayIndex) => {
-    const mapByHour = new Map(
-      ((record.result?.hourlyData || []).map((item) => [Number(item.hour), Number(item.count || 0)]))
+    const effectiveRange = resolveEffectiveRange(
+      dashboardData,
+      peakData,
+      equipmentData,
+      preferenceData,
+      hourlyResultData
     )
+    resolvedRange.startDate = effectiveRange.startDate || startDate
+    resolvedRange.endDate = effectiveRange.endDate || endDate
+    resolvedRange.fallbackApplied = effectiveRange.fallbackApplied
 
-    return Array.from({ length: 24 }, (_, hour) => [hour, dayIndex, mapByHour.get(hour) || 0])
-  })
+    stats.totalUsers = Number(dashboardData?.totalUsers || 0)
+    stats.activeUsers = Number(dashboardData?.activeUsers || 0)
+    stats.totalDuration = Number(dashboardData?.totalDurationMinutes || 0)
+    stats.totalCalories = Math.round(Number(dashboardData?.totalCaloriesBurned || 0))
+
+    peakWarning.currentCount = Number(peakData?.currentCount || 0)
+    peakWarning.threshold = Number(peakData?.threshold || 50)
+    peakWarning.peakCount = Number(peakData?.peakCount || 0)
+    const peakHour = Number(peakData?.peakHour)
+    if (Number.isFinite(peakHour)) {
+      peakWarning.peakHours = `${String(peakHour).padStart(2, '0')}:00-${String(peakHour).padStart(2, '0')}:59`
+    } else {
+      peakWarning.peakHours = '--:00- --:59'
+    }
+
+    if (peakData?.isPeakHour) {
+      peakWarning.level = 'crowded'
+      peakWarning.statusText = '当前拥挤'
+    } else if (peakWarning.currentCount >= Math.floor(peakWarning.threshold * 0.7)) {
+      peakWarning.level = 'busy'
+      peakWarning.statusText = '当前较忙'
+    } else {
+      peakWarning.level = 'normal'
+      peakWarning.statusText = '当前空闲'
+    }
+
+    exercisePreferenceData.value = preferenceData?.preferences || []
+    equipmentUsageRows.value = Object.entries(equipmentData?.equipmentUsage || {})
+      .map(([name, count]) => ({ name, count: Number(count || 0) }))
+      .sort((left, right) => right.count - left.count)
+    coachWorkload.value = (workloadData || []).map((item) => ({
+      ...item,
+      avgProgress: Number(item.avgProgress || 0)
+    }))
+    hourlyData.value = toHourlySeries(hourlyResultData?.hourlyData || [])
+    userGrowthSeries.value = buildUserGrowthSeries(stats.totalUsers, stats.activeUsers)
+
+    await loadHeatmapByRange(params)
+    loadingStates.summary = false
+    loadingStates.heatmap = false
+    loadingStates.charts = false
+    loadingStates.workload = false
+    await nextTick()
+    initCharts()
+    resizeCharts()
+    setTimeout(resizeCharts, 200)
+  } catch (error) {
+    loadingStates.summary = false
+    loadingStates.heatmap = false
+    loadingStates.charts = false
+    loadingStates.workload = false
+    ElMessage.error('加载监控数据失败')
+  }
+}
+
+const loadHeatmapByRange = async (params) => {
+  try {
+    const result = await getHourlyHeatmap(params)
+    const rawLabels = result?.dayLabels || []
+    const rawPoints = result?.points || []
+
+    if (!rawLabels.length) {
+      heatmapDayLabels.value = []
+      heatmapData.value = []
+      return
+    }
+
+    heatmapDayLabels.value = rawLabels.map((label) => label.slice(5))
+    heatmapData.value = rawPoints.map((point) => [
+      Number(point.hour || 0),
+      Number(point.dayIndex || 0),
+      Number(point.count || 0)
+    ])
+  } catch {
+    heatmapDayLabels.value = []
+    heatmapData.value = []
+  }
 }
 
 const buildUserGrowthSeries = (totalUsers, activeUsers) => {
@@ -411,17 +456,12 @@ const resizeCharts = () => {
 }
 
 const getOrCreateChart = (refEl) => {
-  if (!refEl) {
-    return null
-  }
-
+  if (!refEl) return null
   const existing = echarts.getInstanceByDom(refEl)
   const chart = existing || initChart(refEl)
-
   if (!chartInstances.includes(chart)) {
     chartInstances.push(chart)
   }
-
   return chart
 }
 
@@ -435,10 +475,10 @@ const initCharts = () => {
 
 const initUserGrowthChart = () => {
   if (!userGrowthChartRef.value) return
-  const userGrowthChart = getOrCreateChart(userGrowthChartRef.value)
-  if (!userGrowthChart) return
+  const chart = getOrCreateChart(userGrowthChartRef.value)
+  if (!chart) return
 
-  userGrowthChart.setOption({
+  chart.setOption({
     tooltip: { trigger: 'axis' },
     xAxis: { type: 'category', data: ['T-5', 'T-4', 'T-3', 'T-2', 'T-1', '今日'] },
     yAxis: { type: 'value', name: '用户数' },
@@ -454,10 +494,10 @@ const initUserGrowthChart = () => {
 
 const initExerciseTypeChart = () => {
   if (!exerciseTypeChartRef.value) return
-  const exerciseTypeChart = getOrCreateChart(exerciseTypeChartRef.value)
-  if (!exerciseTypeChart) return
+  const chart = getOrCreateChart(exerciseTypeChartRef.value)
+  if (!chart) return
 
-  exerciseTypeChart.setOption({
+  chart.setOption({
     tooltip: { trigger: 'item' },
     legend: { orient: 'vertical', left: 'left' },
     series: [{
@@ -473,19 +513,16 @@ const initExerciseTypeChart = () => {
 
 const initPeakHourChart = () => {
   if (!peakHourChartRef.value) return
-  const peakHourChart = getOrCreateChart(peakHourChartRef.value)
-  if (!peakHourChart) return
+  const chart = getOrCreateChart(peakHourChartRef.value)
+  if (!chart) return
 
-  peakHourChart.setOption({
+  chart.setOption({
     tooltip: { trigger: 'axis' },
-    xAxis: {
-      type: 'category',
-      data: hourlyData.value.map((item) => `${item.hour}:00`)
-    },
+    xAxis: { type: 'category', data: hourlyData.value.map((item) => `${item.hour}:00`) },
     yAxis: { type: 'value', name: '人数' },
     series: [{
-      data: hourlyData.value.map((item) => item.count),
       type: 'bar',
+      data: hourlyData.value.map((item) => item.count),
       itemStyle: { color: CHART_COLORS[1] }
     }]
   })
@@ -493,30 +530,21 @@ const initPeakHourChart = () => {
 
 const initEquipmentUsageChart = () => {
   if (!equipmentUsageChartRef.value) return
-  const equipmentUsageChart = getOrCreateChart(equipmentUsageChartRef.value)
-  if (!equipmentUsageChart) return
+  const chart = getOrCreateChart(equipmentUsageChartRef.value)
+  if (!chart) return
 
   const topRows = equipmentUsageRows.value.slice(0, 10)
   const maxCount = Math.max(...topRows.map((item) => item.count), 1)
 
-  equipmentUsageChart.setOption({
+  chart.setOption({
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
     xAxis: { type: 'value', max: 100, name: '使用率(%)' },
-    yAxis: {
-      type: 'category',
-      data: topRows.map((item) => item.name)
-    },
+    yAxis: { type: 'category', data: topRows.map((item) => item.name) },
     series: [{
       type: 'bar',
       data: topRows.map((item) => Math.round((item.count / maxCount) * 100)),
       itemStyle: {
-        color: (params) => {
-          const colors = [CHART_COLORS[6], CHART_COLORS[5], CHART_COLORS[1]]
-          const value = Number(params?.value || 0)
-          if (value >= 80) return colors[0]
-          if (value >= 60) return colors[1]
-          return colors[2]
-        }
+        color: (params) => CHART_COLORS[params.dataIndex % CHART_COLORS.length]
       },
       label: { show: true, position: 'right', formatter: '{c}%' }
     }]
@@ -529,19 +557,13 @@ const initHeatmapChart = () => {
   if (!chart) return
 
   const maxValue = Math.max(...heatmapData.value.map((item) => item[2]), 1)
-  const yAxisLabels = heatmapDayLabels.value.length ? heatmapDayLabels.value : days
 
   chart.setOption({
     tooltip: {
       position: 'top',
       formatter: (params) => {
-        const value = Array.isArray(params?.value) ? params.value : []
-        const hourIndex = Number.isInteger(value[0]) ? value[0] : 0
-        const dayIndex = Number.isInteger(value[1]) ? value[1] : 0
-        const activeCount = Number(value[2] || 0)
-        const dayLabel = yAxisLabels[dayIndex] || ''
-        const hourLabel = hours[hourIndex] || '0:00'
-        return `${dayLabel} ${hourLabel}<br/>活跃人数: <b>${activeCount}</b> 人`
+        const [hourIndex, dayIndex, value] = params.value || [0, 0, 0]
+        return `${heatmapDayLabels.value[dayIndex] || ''} ${hours[hourIndex] || '0:00'}<br/>活跃人数: <b>${value || 0}</b> 人`
       }
     },
     grid: { height: '70%', top: '5%', left: '10%', right: '6%' },
@@ -553,7 +575,7 @@ const initHeatmapChart = () => {
     },
     yAxis: {
       type: 'category',
-      data: yAxisLabels,
+      data: heatmapDayLabels.value,
       splitArea: { show: true }
     },
     visualMap: {
@@ -563,9 +585,7 @@ const initHeatmapChart = () => {
       orient: 'horizontal',
       left: 'center',
       bottom: '0%',
-      inRange: {
-        color: HEATMAP_GRADIENT
-      },
+      inRange: { color: HEATMAP_GRADIENT },
       text: ['拥挤', '空闲'],
       textStyle: { fontSize: 11 }
     },
@@ -585,6 +605,14 @@ const initHeatmapChart = () => {
 <style scoped>
 .monitoring-page h2 {
   margin-bottom: 20px;
+}
+
+.range-tip {
+  font-size: 13px;
+  color: #606266;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .stat-card {

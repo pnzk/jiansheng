@@ -20,10 +20,11 @@ public class ExerciseReferenceController {
     public Result<Page<ExerciseReference>> getExerciseList(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String exerciseType,
             @RequestParam(required = false) String bodyPart,
             @RequestParam(required = false) String level) {
-        Page<ExerciseReference> result = exerciseReferenceService.getExercisesPage(page, size, exerciseType, bodyPart, level);
+        Page<ExerciseReference> result = exerciseReferenceService.getExercisesPage(page, size, keyword, exerciseType, bodyPart, level);
         return Result.success(result);
     }
     

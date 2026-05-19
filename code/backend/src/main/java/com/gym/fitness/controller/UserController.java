@@ -68,6 +68,12 @@ public class UserController {
         return Result.success(students);
     }
 
+    @GetMapping("/coach/todos/handled")
+    public Result<List<CoachTodoActionResponse>> getHandledCoachTodos(HttpServletRequest request) {
+        Long coachId = getUserIdFromToken(request);
+        return Result.success(userService.getHandledCoachTodos(coachId));
+    }
+
     private Long getUserIdFromToken(HttpServletRequest request) {
         String token = request.getHeader("Authorization");
         if (token != null && token.startsWith("Bearer ")) {

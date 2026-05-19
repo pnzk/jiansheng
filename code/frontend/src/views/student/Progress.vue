@@ -1,7 +1,7 @@
 <template>
   <div class="progress-page">
     <h2>健身效果追踪</h2>
-    
+
     <el-card class="filter-card">
       <el-date-picker
         v-model="dateRange"
@@ -79,17 +79,17 @@
       </el-form>
       <template #footer>
         <el-button @click="showAddDialog = false">取消</el-button>
-        <el-button type="primary" @click="addMetric">确定</el-button>
+        <el-button type="primary" :loading="addingMetric" @click="addMetric">确定</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
-import { getBodyMetricHistory, addBodyMetric } from '@/api/bodyMetric'
+import { addBodyMetric, getBodyMetricHistory } from '@/api/bodyMetric'
 import { getFitnessEffectAnalysis } from '@/api/analytics'
 import { initChart } from '@/utils/chartTheme'
 
@@ -113,38 +113,33 @@ const addForm = ref({
 const loadData = async () => {
   try {
     const params = {}
-    if (dateRange.value && dateRange.value.length === 2) {
-      params.startDate = dateRange.value[0].toISOString().split('T')[0]
-      params.endDate = dateRange.value[1].toISOString().split('T')[0]
+    if (dateRange.value?.length === 2) {
+      params.startDate = formatDateValue(dateRange.value[0])
+      params.endDate = formatDateValue(dateRange.value[1])
     }
-    
+
     const metrics = await getBodyMetricHistory(params)
     const analysisData = await getFitnessEffectAnalysis(params)
-    analysis.value = analysisData
-    
-    renderCharts(metrics)
-  } catch (error) {
+    analysis.value = analysisData || {}
+    renderCharts(metrics || [])
+  } catch {
     ElMessage.error('加载数据失败')
   }
 }
 
 const addMetric = async () => {
-  if (addingMetric.value) {
-    return
-  }
+  if (addingMetric.value) return
 
   addingMetric.value = true
   try {
-    const payload = {
+    await addBodyMetric({
       ...addForm.value,
       measurementDate: formatDateValue(addForm.value.measurementDate)
-    }
-
-    await addBodyMetric(payload)
+    })
     ElMessage.success('添加成功')
     showAddDialog.value = false
     await loadData()
-  } catch (error) {
+  } catch {
     ElMessage.error('添加失败')
   } finally {
     addingMetric.value = false
@@ -158,17 +153,17 @@ const renderCharts = (metrics) => {
   if (!bodyFatChart) {
     bodyFatChart = initChart(bodyFatChartRef.value)
   }
-  
+
   const sortedMetrics = [...(metrics || [])].sort((left, right) => {
     const leftDate = new Date(left.measurementDate).getTime()
     const rightDate = new Date(right.measurementDate).getTime()
     return leftDate - rightDate
   })
 
-  const dates = sortedMetrics.map(m => m.measurementDate)
-  const weights = sortedMetrics.map(m => m.weightKg)
-  const bodyFats = sortedMetrics.map(m => m.bodyFatPercentage)
-  
+  const dates = sortedMetrics.map((item) => item.measurementDate)
+  const weights = sortedMetrics.map((item) => item.weightKg)
+  const bodyFats = sortedMetrics.map((item) => item.bodyFatPercentage)
+
   weightChart.setOption({
     title: { text: '体重变化趋势' },
     tooltip: { trigger: 'axis' },
@@ -176,7 +171,7 @@ const renderCharts = (metrics) => {
     yAxis: { type: 'value', name: '体重(kg)' },
     series: [{ type: 'line', data: weights, smooth: true }]
   })
-  
+
   bodyFatChart.setOption({
     title: { text: '体脂率变化趋势' },
     tooltip: { trigger: 'axis' },
@@ -191,15 +186,9 @@ onMounted(() => {
 })
 
 const formatDateValue = (value) => {
-  if (!value) {
-    return null
-  }
-
+  if (!value) return null
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return null
-  }
-
+  if (Number.isNaN(date.getTime())) return null
   const year = date.getFullYear()
   const month = `${date.getMonth() + 1}`.padStart(2, '0')
   const day = `${date.getDate()}`.padStart(2, '0')
@@ -212,7 +201,9 @@ const formatDateValue = (value) => {
   padding: 20px;
 }
 
-.filter-card, .chart-card, .stats-card {
+.filter-card,
+.chart-card,
+.stats-card {
   margin-bottom: 20px;
 }
 

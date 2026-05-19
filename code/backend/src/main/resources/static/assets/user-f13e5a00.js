@@ -1,0 +1,1 @@
+import{r as s}from"./request-8508947b.js";const r=()=>s.get("/user/profile"),o=e=>s.put("/user/profile",e),a=e=>s.put("/user/password",e),u=e=>s.put("/user/privacy",e),n=()=>s.get("/user/coach/students"),c=e=>s.post("/user/coach/todos/handle",e),d=()=>s.get("/user/coach/todos/handled");export{u as a,n as b,a as c,d,r as g,c as h,o as u};

@@ -1,0 +1,1 @@
+import{r as t}from"./request-8508947b.js";const r=n=>t.post("/plan/create",n),s=(n,a)=>t.put(`/plan/${n}`,a),l=n=>t.delete(`/plan/${n}`),g=n=>t.get(`/plan/student/${n}`),i=()=>t.get("/plan/my"),c=()=>t.get("/plan/coach");export{g as a,c as b,r as c,l as d,i as g,s as u};

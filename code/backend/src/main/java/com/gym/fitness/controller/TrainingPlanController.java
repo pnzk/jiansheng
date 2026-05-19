@@ -28,9 +28,11 @@ public class TrainingPlanController {
 
     @PutMapping("/{planId}")
     public Result<TrainingPlanResponse> updateTrainingPlan(
+            @RequestHeader("Authorization") String token,
             @PathVariable Long planId,
             @RequestBody UpdatePlanRequest request) {
-        TrainingPlanResponse response = trainingPlanService.updateTrainingPlan(planId, request);
+        Long coachId = jwtUtil.getUserIdFromToken(token.replace("Bearer ", ""));
+        TrainingPlanResponse response = trainingPlanService.updateTrainingPlan(coachId, planId, request);
         return Result.success(response);
     }
 

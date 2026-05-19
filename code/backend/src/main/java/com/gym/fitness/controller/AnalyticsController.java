@@ -26,8 +26,10 @@ public class AnalyticsController {
     private final JwtUtil jwtUtil;
 
     @GetMapping("/dashboard")
-    public Result<DashboardStatisticsResponse> getDashboardStatistics() {
-        DashboardStatisticsResponse stats = analyticsService.getDashboardStatistics();
+    public Result<DashboardStatisticsResponse> getDashboardStatistics(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        DashboardStatisticsResponse stats = analyticsService.getDashboardStatistics(startDate, endDate);
         return Result.success(stats);
     }
 
@@ -52,20 +54,28 @@ public class AnalyticsController {
     @GetMapping("/leaderboard")
     public Result<LeaderboardResponse> getLeaderboard(
             @RequestParam String type,
-            @RequestParam(defaultValue = "10") int limit) {
-        LeaderboardResponse leaderboard = analyticsService.getLeaderboard(type, limit);
+            @RequestParam(defaultValue = "10") int limit,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        LeaderboardResponse leaderboard = (startDate != null || endDate != null)
+                ? analyticsService.getLeaderboard(type, limit, startDate, endDate)
+                : analyticsService.getLeaderboard(type, limit);
         return Result.success(leaderboard);
     }
 
     @GetMapping("/peak-hour")
-    public Result<PeakHourWarningResponse> getPeakHourWarning() {
-        PeakHourWarningResponse warning = analyticsService.getPeakHourWarning();
+    public Result<PeakHourWarningResponse> getPeakHourWarning(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        PeakHourWarningResponse warning = analyticsService.getPeakHourWarning(startDate, endDate);
         return Result.success(warning);
     }
 
     @GetMapping("/equipment-usage")
-    public Result<EquipmentUsageResponse> getEquipmentUsage() {
-        EquipmentUsageResponse usage = analyticsService.getEquipmentUsage();
+    public Result<EquipmentUsageResponse> getEquipmentUsage(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        EquipmentUsageResponse usage = analyticsService.getEquipmentUsage(startDate, endDate);
         return Result.success(usage);
     }
 
@@ -84,6 +94,13 @@ public class AnalyticsController {
 
         HourlyActivityResponse activity = analyticsService.getHourlyActivity(actualStartDate, actualEndDate);
         return Result.success(activity);
+    }
+
+    @GetMapping("/hourly-heatmap")
+    public Result<HourlyHeatmapResponse> getHourlyHeatmap(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        return Result.success(analyticsService.getHourlyHeatmap(startDate, endDate));
     }
 
     @GetMapping("/exercise-preference")

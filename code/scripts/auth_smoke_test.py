@@ -64,7 +64,7 @@ def main():
     print()
 
     suffix = rand_suffix()
-    username = f'smoke_user_{suffix}'
+    username = f'smk{suffix[-12:]}'
     email = f'{username}@example.com'
     phone = f'13{suffix[-9:]}'
 

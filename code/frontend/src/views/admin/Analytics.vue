@@ -24,10 +24,16 @@
         <el-form-item>
           <el-button type="primary" @click="loadAnalytics">查询</el-button>
         </el-form-item>
+        <el-form-item>
+          <span class="range-tip">
+            当前展示区间：{{ resolvedRange.startDate || '--' }} 至 {{ resolvedRange.endDate || '--' }}
+            <el-tag v-if="resolvedRange.fallbackApplied" size="small" type="warning" effect="plain">已自动回退到最近有数据区间</el-tag>
+          </span>
+        </el-form-item>
       </el-form>
     </el-card>
 
-    <el-row :gutter="20" style="margin-top: 20px">
+    <el-row :gutter="20" style="margin-top: 20px" v-loading="loadingStates.summary">
       <el-col :span="6">
         <el-card>
           <div class="stat-card">
@@ -36,7 +42,7 @@
             </div>
             <div class="stat-content">
               <div class="stat-value">{{ analytics.activeRate }}%</div>
-              <div class="stat-label">用户活跃率</div>
+              <div class="stat-label">区间日均活跃率</div>
             </div>
           </div>
         </el-card>
@@ -49,7 +55,7 @@
             </div>
             <div class="stat-content">
               <div class="stat-value">{{ analytics.retentionRate }}%</div>
-              <div class="stat-label">7日留存率（估算）</div>
+              <div class="stat-label">7日留存率</div>
             </div>
           </div>
         </el-card>
@@ -82,11 +88,11 @@
       </el-col>
     </el-row>
 
-    <el-row :gutter="20" style="margin-top: 20px">
+    <el-row :gutter="20" style="margin-top: 20px" v-loading="loadingStates.trends">
       <el-col :span="12">
         <el-card>
           <template #header>
-            <span>用户活跃度趋势</span>
+            <span>用户活跃趋势</span>
           </template>
           <div ref="activityTrendChartRef" style="height: 350px"></div>
         </el-card>
@@ -101,7 +107,7 @@
       </el-col>
     </el-row>
 
-    <el-row :gutter="20" style="margin-top: 20px">
+    <el-row :gutter="20" style="margin-top: 20px" v-loading="loadingStates.preference">
       <el-col :span="12">
         <el-card>
           <template #header>
@@ -120,12 +126,12 @@
       </el-col>
     </el-row>
 
-    <el-row :gutter="20" style="margin-top: 20px">
+    <el-row :gutter="20" style="margin-top: 20px" v-loading="loadingStates.leaderboards">
       <el-col :span="8">
         <el-card>
           <template #header>
-            <div style="display: flex; align-items: center">
-              <el-icon color="#ffd700" size="20" style="margin-right: 8px"><Trophy /></el-icon>
+            <div class="leaderboard-title">
+              <el-icon color="#ffd700" size="20"><Trophy /></el-icon>
               <span>运动时长排行榜</span>
             </div>
           </template>
@@ -140,7 +146,7 @@
             <el-table-column prop="userName" label="姓名" />
             <el-table-column prop="value" label="时长" align="right">
               <template #default="{ row }">
-                <span style="font-weight: bold">{{ row.value }}分钟</span>
+                <span class="value-strong">{{ row.value }}分钟</span>
               </template>
             </el-table-column>
           </el-table>
@@ -149,8 +155,8 @@
       <el-col :span="8">
         <el-card>
           <template #header>
-            <div style="display: flex; align-items: center">
-              <el-icon color="#ffd700" size="20" style="margin-right: 8px"><Trophy /></el-icon>
+            <div class="leaderboard-title">
+              <el-icon color="#ffd700" size="20"><Trophy /></el-icon>
               <span>卡路里消耗排行榜</span>
             </div>
           </template>
@@ -165,7 +171,7 @@
             <el-table-column prop="userName" label="姓名" />
             <el-table-column prop="value" label="卡路里" align="right">
               <template #default="{ row }">
-                <span style="font-weight: bold">{{ row.value }}卡</span>
+                <span class="value-strong">{{ row.value }}</span>
               </template>
             </el-table-column>
           </el-table>
@@ -174,8 +180,8 @@
       <el-col :span="8">
         <el-card>
           <template #header>
-            <div style="display: flex; align-items: center">
-              <el-icon color="#ffd700" size="20" style="margin-right: 8px"><Trophy /></el-icon>
+            <div class="leaderboard-title">
+              <el-icon color="#ffd700" size="20"><Trophy /></el-icon>
               <span>减重效果排行榜</span>
             </div>
           </template>
@@ -190,7 +196,7 @@
             <el-table-column prop="userName" label="姓名" />
             <el-table-column prop="value" label="减重" align="right">
               <template #default="{ row }">
-                <span style="font-weight: bold; color: #67c23a">-{{ row.value }}kg</span>
+                <span class="value-strong weight-loss">-{{ row.value }}kg</span>
               </template>
             </el-table-column>
           </el-table>
@@ -236,8 +242,20 @@ const leaderboards = reactive({
 })
 
 const behaviorTrend = ref([])
+const retentionSeries = ref([])
 const preferenceSeries = ref([])
 const hourlySeries = ref([])
+const resolvedRange = reactive({
+  startDate: '',
+  endDate: '',
+  fallbackApplied: false
+})
+const loadingStates = reactive({
+  summary: false,
+  trends: false,
+  preference: false,
+  leaderboards: false
+})
 
 onMounted(async () => {
   await loadAnalytics()
@@ -257,26 +275,36 @@ const loadAnalytics = async () => {
     endDate: queryRange.endDate
   }
 
-  hourlyChartTitle.value = getHourlyTitle(queryRange)
-
   try {
+    loadingStates.summary = true
+    loadingStates.trends = true
+    loadingStates.preference = true
     const [
       dashboardResult,
       behaviorResult,
       preferenceResult,
-      hourlyResult,
+      hourlyResult
+    ] = await Promise.allSettled([
+      getDashboardStatistics(params),
+      getUserBehaviorAnalysis(params),
+      getExercisePreference(params),
+      getHourlyActivity(params)
+    ])
+    loadingStates.summary = false
+    loadingStates.trends = false
+    loadingStates.preference = false
+
+    loadingStates.leaderboards = true
+    const [
       durationResult,
       caloriesResult,
       weightLossResult
     ] = await Promise.allSettled([
-      getDashboardStatistics(),
-      getUserBehaviorAnalysis(params),
-      getExercisePreference(params),
-      getHourlyActivity(params),
-      getLeaderboard('TOTAL_DURATION', 10),
-      getLeaderboard('TOTAL_CALORIES', 10),
-      getLeaderboard('WEIGHT_LOSS', 10)
+      getLeaderboard('TOTAL_DURATION', 10, params),
+      getLeaderboard('TOTAL_CALORIES', 10, params),
+      getLeaderboard('WEIGHT_LOSS', 10, params)
     ])
+    loadingStates.leaderboards = false
 
     const dashboardData = dashboardResult.status === 'fulfilled' ? dashboardResult.value : {}
     const behaviorData = behaviorResult.status === 'fulfilled' ? behaviorResult.value : {}
@@ -286,26 +314,32 @@ const loadAnalytics = async () => {
     const caloriesData = caloriesResult.status === 'fulfilled' ? caloriesResult.value : {}
     const weightLossData = weightLossResult.status === 'fulfilled' ? weightLossResult.value : {}
 
-    const totalUsers = Number(dashboardData?.totalUsers || 0)
-    const activeUsers = Number(behaviorData?.activeUserCount || 0)
+    const effectiveRange = resolveEffectiveRange(
+      queryRange,
+      behaviorData,
+      preferenceData,
+      hourlyData,
+      durationData,
+      caloriesData,
+      weightLossData
+    )
 
-    analytics.activeRate = totalUsers > 0 ? Math.min(100, Math.round((activeUsers / totalUsers) * 100)) : 0
+    resolvedRange.startDate = effectiveRange.startDate
+    resolvedRange.endDate = effectiveRange.endDate
+    resolvedRange.fallbackApplied = effectiveRange.fallbackApplied
+    hourlyChartTitle.value = getHourlyTitle(effectiveRange)
+
+    analytics.activeRate = Math.round(Number(behaviorData?.averageActiveRate || 0))
     analytics.avgDuration = Math.round(Number(behaviorData?.averageDurationMinutes || 0))
-    analytics.retentionRate = calculateRetentionRate(activeUsers, totalUsers)
+    analytics.retentionRate = getPrimaryRetentionRate(behaviorData?.retentionRates || [])
 
     leaderboards.duration = normalizeLeaderboardEntries(durationData)
     leaderboards.calories = normalizeLeaderboardEntries(caloriesData)
     leaderboards.weightLoss = normalizeLeaderboardEntries(weightLossData)
+    analytics.completionRate = Math.round(Number(behaviorData?.averagePlanCompletionRate || 0))
 
-    analytics.completionRate = calculateCompletionRateFromLeaderboard(leaderboards.duration)
-
-    behaviorTrend.value = buildBehaviorTrend(
-      totalUsers,
-      activeUsers,
-      analytics.avgDuration,
-      queryRange.startDate,
-      queryRange.endDate
-    )
+    behaviorTrend.value = buildBehaviorTrend(behaviorData?.dailyActivity || [])
+    retentionSeries.value = buildRetentionSeries(behaviorData?.retentionRates || [])
     preferenceSeries.value = (preferenceData?.preferences || []).map((item) => ({
       name: item.exerciseType || '未分类',
       value: Number(item.count || 0)
@@ -319,7 +353,11 @@ const loadAnalytics = async () => {
     initCharts()
     resizeCharts()
     setTimeout(resizeCharts, 200)
-  } catch (error) {
+  } catch {
+    loadingStates.summary = false
+    loadingStates.trends = false
+    loadingStates.preference = false
+    loadingStates.leaderboards = false
     analytics.activeRate = 0
     analytics.retentionRate = 0
     analytics.avgDuration = 0
@@ -328,18 +366,23 @@ const loadAnalytics = async () => {
     leaderboards.calories = []
     leaderboards.weightLoss = []
     behaviorTrend.value = []
+    retentionSeries.value = []
     preferenceSeries.value = []
     hourlySeries.value = []
+    resolvedRange.startDate = queryRange.startDate
+    resolvedRange.endDate = queryRange.endDate
+    resolvedRange.fallbackApplied = false
+    hourlyChartTitle.value = getHourlyTitle(queryRange)
 
     await nextTick()
     initCharts()
     resizeCharts()
-    ElMessage.error('数据分析加载失败，已展示可用数据')
+    ElMessage.error('数据分析加载失败')
   }
 }
 
 const getHourlyTitle = (queryRange) => {
-  if (queryRange.mode === 'custom') {
+  if (queryRange.mode === 'custom' || queryRange.fallbackApplied) {
     return `时段活跃度分布（${queryRange.startDate} 至 ${queryRange.endDate}）`
   }
   if (queryRange.mode === 'today') return '时段活跃度分布（当天）'
@@ -394,73 +437,51 @@ const normalizeLeaderboardEntries = (data) => {
   }))
 }
 
-const calculateRetentionRate = (activeUsers, totalUsers) => {
-  if (!totalUsers) return 0
-  const ratio = (activeUsers / totalUsers) * 100
-  return Math.max(0, Math.min(100, Math.round(ratio * 0.85 + 10)))
+const resolveEffectiveRange = (queryRange, ...responses) => {
+  const candidates = responses
+    .map((item) => ({
+      startDate: item?.periodStart,
+      endDate: item?.periodEnd,
+      fallbackApplied: Boolean(item?.fallbackApplied)
+    }))
+    .filter((item) => item.startDate && item.endDate)
+
+  if (!candidates.length) {
+    return { ...queryRange, fallbackApplied: false }
+  }
+
+  return candidates.find((item) => item.fallbackApplied) || candidates[0]
 }
 
-const calculateCompletionRateFromLeaderboard = (durationList) => {
-  if (!durationList.length) {
-    return 0
-  }
-  const avgDuration = durationList.reduce((sum, item) => sum + Number(item.value || 0), 0) / durationList.length
-  return Math.max(0, Math.min(100, Math.round((avgDuration / 3000) * 100)))
+const getPrimaryRetentionRate = (retentionRates) => {
+  const day7 = (Array.isArray(retentionRates) ? retentionRates : []).find((item) => Number(item?.days) === 7)
+  return Number(day7?.retentionRate || 0).toFixed(0)
 }
 
-const buildTrendLabels = (startDateText, endDateText) => {
-  const start = new Date(`${startDateText}T00:00:00`)
-  const end = new Date(`${endDateText}T00:00:00`)
+const buildBehaviorTrend = (dailyActivity) => {
+  return (Array.isArray(dailyActivity) ? dailyActivity : []).map((item) => {
+    const date = item?.date ? new Date(`${item.date}T00:00:00`) : null
+    const label = date && !Number.isNaN(date.getTime())
+      ? `${date.getMonth() + 1}/${date.getDate()}`
+      : '未知'
 
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
-    return ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-  }
-
-  const totalDays = Math.floor((end - start) / (24 * 60 * 60 * 1000)) + 1
-  const maxPoints = 30
-  const step = Math.max(1, Math.ceil(totalDays / maxPoints))
-  const labels = []
-
-  for (let offset = 0; offset < totalDays; offset += step) {
-    const current = new Date(start)
-    current.setDate(start.getDate() + offset)
-    labels.push(`${current.getMonth() + 1}/${current.getDate()}`)
-  }
-
-  const endLabel = `${end.getMonth() + 1}/${end.getDate()}`
-  if (labels.length === 0) {
-    labels.push(endLabel)
-  } else if (labels[labels.length - 1] !== endLabel) {
-    labels[labels.length - 1] = endLabel
-  }
-
-  return labels
-}
-
-const buildBehaviorTrend = (totalUsers, activeUsers, avgDuration, startDateText, endDateText) => {
-  const labels = buildTrendLabels(startDateText, endDateText)
-  const baseDaily = Math.max(0, Math.round(activeUsers * 0.65))
-  const volatility = Math.max(2, Math.round(activeUsers * 0.08))
-  const denominator = Math.max(1, labels.length - 1)
-
-  const daily = labels.map((_, index) => {
-    if (labels.length === 1) {
-      return Math.max(0, activeUsers)
+    return {
+      day: label,
+      daily: Number(item?.activeUserCount || 0),
+      avgDuration: Number(item?.averageDurationMinutes || 0)
     }
-    const position = index / denominator
-    const wave = Math.sin(position * Math.PI * 1.25)
-    const drift = (position - 0.5) * volatility * 0.6
-    return Math.max(0, Math.round(baseDaily + wave * volatility + drift))
   })
+}
 
-  const weekly = labels.map((_, index) => {
-    return Math.max(
-      daily[index],
-      Math.round(daily[index] + activeUsers * 0.2 + (avgDuration || 20) * 0.3 + totalUsers * 0.02)
-    )
-  })
-
-  return labels.map((day, index) => ({ day, daily: daily[index], weekly: weekly[index] }))
+const buildRetentionSeries = (retentionRates) => {
+  return (Array.isArray(retentionRates) ? retentionRates : [])
+    .filter((item) => Number(item?.cohortSize || 0) > 0)
+    .map((item) => ({
+      label: item?.label || `${item?.days || 0}日`,
+      value: Number(item?.retentionRate || 0),
+      retainedUsers: Number(item?.retainedUsers || 0),
+      cohortSize: Number(item?.cohortSize || 0)
+    }))
 }
 
 const resizeCharts = () => {
@@ -468,17 +489,12 @@ const resizeCharts = () => {
 }
 
 const getOrCreateChart = (domRef) => {
-  if (!domRef) {
-    return null
-  }
-
+  if (!domRef) return null
   const existing = echarts.getInstanceByDom(domRef)
   const chart = existing || initChart(domRef)
-
   if (!chartInstances.includes(chart)) {
     chartInstances.push(chart)
   }
-
   return chart
 }
 
@@ -493,26 +509,29 @@ const initActivityTrendChart = () => {
   if (!activityTrendChartRef.value) return
   const chart = getOrCreateChart(activityTrendChartRef.value)
   if (!chart) return
-  const days = behaviorTrend.value.map((item) => item.day)
 
   chart.setOption({
     tooltip: { trigger: 'axis' },
-    legend: { data: ['日活跃用户', '周活跃用户'] },
-    xAxis: { type: 'category', data: days },
-    yAxis: { type: 'value', name: '用户数' },
+    legend: { data: ['日活跃用户', '日均时长'] },
+    xAxis: { type: 'category', data: behaviorTrend.value.map((item) => item.day) },
+    yAxis: [
+      { type: 'value', name: '人数' },
+      { type: 'value', name: '分钟' }
+    ],
     series: [
       {
         name: '日活跃用户',
         type: 'line',
-        data: behaviorTrend.value.map((item) => item.daily),
         smooth: true,
+        data: behaviorTrend.value.map((item) => item.daily),
         itemStyle: { color: CHART_COLORS[0] }
       },
       {
-        name: '周活跃用户',
+        name: '日均时长',
         type: 'line',
-        data: behaviorTrend.value.map((item) => item.weekly),
         smooth: true,
+        yAxisIndex: 1,
+        data: behaviorTrend.value.map((item) => item.avgDuration),
         itemStyle: { color: CHART_COLORS[1] }
       }
     ]
@@ -523,29 +542,42 @@ const initRetentionChart = () => {
   if (!retentionChartRef.value) return
   const chart = getOrCreateChart(retentionChartRef.value)
   if (!chart) return
-  const d1 = analytics.retentionRate
-  const d3 = Math.max(0, Math.round(d1 * 0.88))
-  const d7 = Math.max(0, Math.round(d1 * 0.76))
-  const d14 = Math.max(0, Math.round(d1 * 0.62))
-  const d30 = Math.max(0, Math.round(d1 * 0.48))
 
   chart.setOption({
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    xAxis: {
-      type: 'category',
-      data: ['次日', '3日', '7日', '14日', '30日']
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: (params) => {
+        const current = params?.[0]
+        if (!current) return ''
+        const data = retentionSeries.value[current.dataIndex] || {}
+        return `${data.label}<br/>留存率: <b>${Number(data.value || 0).toFixed(2)}%</b><br/>留存用户: ${data.retainedUsers || 0}/${data.cohortSize || 0}`
+      }
     },
+    xAxis: { type: 'category', data: retentionSeries.value.map((item) => item.label) },
     yAxis: { type: 'value', name: '留存率(%)', max: 100 },
     series: [{
       type: 'bar',
-      data: [d1, d3, d7, d14, d30],
+      data: retentionSeries.value.map((item) => item.value),
       itemStyle: {
         color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
           { offset: 0, color: CHART_COLORS[0] },
           { offset: 1, color: CHART_COLORS[1] }
         ])
       }
-    }]
+    }],
+    graphic: retentionSeries.value.length
+      ? []
+      : [{
+          type: 'text',
+          left: 'center',
+          top: 'middle',
+          style: {
+            text: '当前时间范围暂无可计算的留存周期',
+            fill: '#909399',
+            fontSize: 14
+          }
+        }]
   })
 }
 
@@ -555,12 +587,11 @@ const initExercisePreferenceChart = () => {
   if (!chart) return
 
   chart.setOption({
-    tooltip: { trigger: 'item', formatter: '{b}: {c}人 ({d}%)' },
+    tooltip: { trigger: 'item', formatter: '{b}: {c}次 ({d}%)' },
     legend: { orient: 'vertical', left: 'left' },
     series: [{
       type: 'pie',
       radius: ['40%', '70%'],
-      avoidLabelOverlap: false,
       itemStyle: {
         borderRadius: 10,
         borderColor: '#fff',
@@ -578,19 +609,13 @@ const initHourlyActivityChart = () => {
 
   chart.setOption({
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    xAxis: {
-      type: 'category',
-      data: hourlySeries.value.map((item) => `${item.hour}:00`)
-    },
+    xAxis: { type: 'category', data: hourlySeries.value.map((item) => `${item.hour}:00`) },
     yAxis: { type: 'value', name: '活跃人数' },
     series: [{
       type: 'bar',
       data: hourlySeries.value.map((item) => item.count),
       itemStyle: {
-        color: (params) => {
-          const colors = CHART_COLORS
-          return colors[params.dataIndex % colors.length]
-        }
+        color: (params) => CHART_COLORS[params.dataIndex % CHART_COLORS.length]
       }
     }]
   })
@@ -600,6 +625,14 @@ const initHourlyActivityChart = () => {
 <style scoped>
 .analytics-page h2 {
   margin-bottom: 20px;
+}
+
+.range-tip {
+  font-size: 13px;
+  color: #606266;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .stat-card {
@@ -632,5 +665,19 @@ const initHourlyActivityChart = () => {
   font-size: 14px;
   color: #909399;
   margin-top: 5px;
+}
+
+.leaderboard-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.value-strong {
+  font-weight: bold;
+}
+
+.weight-loss {
+  color: #67c23a;
 }
 </style>

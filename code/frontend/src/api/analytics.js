@@ -1,7 +1,7 @@
 import request from './request'
 
-export const getDashboardStatistics = () => {
-  return request.get('/analytics/dashboard')
+export const getDashboardStatistics = (params) => {
+  return request.get('/analytics/dashboard', { params })
 }
 
 export const getUserBehaviorAnalysis = (params) => {
@@ -12,16 +12,16 @@ export const getFitnessEffectAnalysis = (params) => {
   return request.get('/analytics/fitness-effect', { params })
 }
 
-export const getLeaderboard = (type, limit = 10) => {
-  return request.get('/analytics/leaderboard', { params: { type, limit } })
+export const getLeaderboard = (type, limit = 10, params = {}) => {
+  return request.get('/analytics/leaderboard', { params: { type, limit, ...params } })
 }
 
-export const getPeakHourWarning = () => {
-  return request.get('/analytics/peak-hour')
+export const getPeakHourWarning = (params) => {
+  return request.get('/analytics/peak-hour', { params })
 }
 
-export const getEquipmentUsage = () => {
-  return request.get('/analytics/equipment-usage')
+export const getEquipmentUsage = (params) => {
+  return request.get('/analytics/equipment-usage', { params })
 }
 
 export const getCoachWorkload = () => {
@@ -38,6 +38,10 @@ export const getCoachStudentReport = (params) => {
 
 export const getHourlyActivity = (params) => {
   return request.get('/analytics/hourly-activity', { params })
+}
+
+export const getHourlyHeatmap = (params) => {
+  return request.get('/analytics/hourly-heatmap', { params })
 }
 
 export const getExercisePreference = (params) => {
