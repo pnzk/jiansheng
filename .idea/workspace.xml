@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="bf411be8-2498-43b4-929e-116f934b09ee" name="更改" comment="">
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/code/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-common/src/main/java/com/gym/fitness/common/exception/BusinessException.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-common/src/main/java/com/gym/fitness/common/result/ErrorCode.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-common/src/main/java/com/gym/fitness/common/result/Result.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-common/src/main/java/com/gym/fitness/common/util/JwtUtil.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-domain/src/main/java/com/gym/fitness/domain/entity/Achievement.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-domain/src/main/java/com/gym/fitness/domain/entity/BodyMetric.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-domain/src/main/java/com/gym/fitness/domain/entity/ExerciseRecord.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-domain/src/main/java/com/gym/fitness/domain/entity/ExerciseReference.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-domain/src/main/java/com/gym/fitness/domain/entity/Leaderboard.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-domain/src/main/java/com/gym/fitness/domain/entity/TrainingPlan.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-domain/src/main/java/com/gym/fitness/domain/entity/User.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-domain/src/main/java/com/gym/fitness/domain/entity/UserAchievement.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-repository/src/main/java/com/gym/fitness/repository/config/MybatisPlusConfig.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-repository/src/main/java/com/gym/fitness/repository/mapper/AchievementMapper.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-repository/src/main/java/com/gym/fitness/repository/mapper/BodyMetricMapper.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-repository/src/main/java/com/gym/fitness/repository/mapper/ExerciseRecordMapper.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-repository/src/main/java/com/gym/fitness/repository/mapper/ExerciseReferenceMapper.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-repository/src/main/java/com/gym/fitness/repository/mapper/LeaderboardMapper.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-repository/src/main/java/com/gym/fitness/repository/mapper/TrainingPlanMapper.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-repository/src/main/java/com/gym/fitness/repository/mapper/UserAchievementMapper.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-repository/src/main/java/com/gym/fitness/repository/mapper/UserMapper.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/AchievementService.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/AdminService.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/AnalyticsService.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/AuthService.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/BodyMetricService.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/ExerciseReferenceService.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/ExerciseService.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/TrainingPlanService.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/UserService.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/achievement/AchievementResponse.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/admin/AssignCoachRequest.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/admin/CoachRequest.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/admin/CoachResponse.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/admin/CoachStudentsResponse.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/admin/StudentRequest.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/admin/StudentResponse.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/analytics/DashboardStatisticsResponse.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/analytics/EquipmentUsageResponse.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/analytics/ExercisePreferenceResponse.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/analytics/FitnessEffectAnalysisResponse.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/analytics/HourlyActivityResponse.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/analytics/LeaderboardEntry.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/analytics/LeaderboardResponse.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/analytics/PeakHourWarningResponse.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/analytics/UserBehaviorAnalysisResponse.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/auth/LoginRequest.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/auth/LoginResponse.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/auth/RegisterRequest.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/bodymetric/AddBodyMetricRequest.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/bodymetric/BodyMetricResponse.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/exercise/AddExerciseRequest.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/exercise/ExerciseRecordResponse.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/exercise/ExerciseStatisticsResponse.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/plan/CreatePlanRequest.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/plan/ProgressUpdateRequest.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/plan/TrainingPlanResponse.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/plan/UpdatePlanRequest.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/user/ChangePasswordRequest.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/user/PrivacySettingsRequest.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/user/UpdateProfileRequest.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-service/src/main/java/com/gym/fitness/service/dto/user/UserProfileResponse.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-web/src/main/java/com/gym/fitness/GymFitnessApplication.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-web/src/main/java/com/gym/fitness/config/CorsConfig.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-web/src/main/java/com/gym/fitness/config/SecurityConfig.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-web/src/main/java/com/gym/fitness/controller/AchievementController.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-web/src/main/java/com/gym/fitness/controller/AdminController.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-web/src/main/java/com/gym/fitness/controller/AnalyticsController.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-web/src/main/java/com/gym/fitness/controller/AuthController.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-web/src/main/java/com/gym/fitness/controller/BodyMetricController.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-web/src/main/java/com/gym/fitness/controller/ExerciseController.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-web/src/main/java/com/gym/fitness/controller/ExerciseReferenceController.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-web/src/main/java/com/gym/fitness/controller/TrainingPlanController.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-web/src/main/java/com/gym/fitness/controller/UserController.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-web/src/main/java/com/gym/fitness/exception/GlobalExceptionHandler.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/gym-web/src/main/resources/application.yml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/backend/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/code/backend/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/check-env.bat" beforeDir="false" afterPath="$PROJECT_DIR$/code/check-env.bat" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/database/import_cleaned_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/code/database/import_cleaned_data.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/frontend/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/code/frontend/package-lock.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/frontend/src/views/admin/Coaches.vue" beforeDir="false" afterPath="$PROJECT_DIR$/code/frontend/src/views/admin/Coaches.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/frontend/src/views/admin/Students.vue" beforeDir="false" afterPath="$PROJECT_DIR$/code/frontend/src/views/admin/Students.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/frontend/src/views/coach/Students.vue" beforeDir="false" afterPath="$PROJECT_DIR$/code/frontend/src/views/coach/Students.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/frontend/vite.config.js" beforeDir="false" afterPath="$PROJECT_DIR$/code/frontend/vite.config.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/import-data.bat" beforeDir="false" afterPath="$PROJECT_DIR$/code/import-data.bat" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/init-database.bat" beforeDir="false" afterPath="$PROJECT_DIR$/code/init-database.bat" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/quick-start.bat" beforeDir="false" afterPath="$PROJECT_DIR$/code/quick-start.bat" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/start-all.bat" beforeDir="false" afterPath="$PROJECT_DIR$/code/start-all.bat" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/code/start.bat" beforeDir="false" afterPath="$PROJECT_DIR$/code/start.bat" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 3
+}</component>
+  <component name="ProjectId" id="38hfv5FxMz02bkr8N6LphOTaZH4" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "git-widget-placeholder": "main",
+    "kotlin-language-version-configured": "true",
+    "last_opened_file_path": "D:/Java Project/jianshen/jianshen",
+    "project.structure.last.edited": "模块",
+    "project.structure.proportion": "0.0",
+    "project.structure.side.proportion": "0.0",
+    "settings.editor.selected.configurable": "swagger",
+    "应用程序.AutoSetup.executor": "Run",
+    "应用程序.GymFitnessApplication.executor": "Run",
+    "应用程序.StartAll.executor": "Run",
+    "应用程序.StopAll.executor": "Run"
+  }
+}]]></component>
+  <component name="RunManager" selected="应用程序.StartAll" />
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-jdk-9823dce3aa75-bf35d07a577b-intellij.indexing.shared.core-IU-252.23892.409" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="默认任务">
+      <changelist id="bf411be8-2498-43b4-929e-116f934b09ee" name="更改" comment="" />
+      <created>1769256951834</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1769256951834</updated>
+    </task>
+    <servers />
+  </component>
+  <component name="XSLT-Support.FileAssociations.UIState">
+    <expand />
+    <select />
+  </component>
+</project>
